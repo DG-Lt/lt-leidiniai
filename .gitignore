@@ -1,0 +1,6 @@
+data/
+out/
+*.pdf
+__pycache__/
+*.pyc
+.venv/
