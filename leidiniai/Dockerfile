@@ -22,6 +22,11 @@ RUN apt-get update \
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
+# Headless Chromium for the browser fallback (Rimi always, others when blocked). ~400 MB.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN python -m playwright install --with-deps chromium \
+ && rm -rf /var/lib/apt/lists/*
+
 COPY app /opt/leidiniai
 WORKDIR /opt/leidiniai
 

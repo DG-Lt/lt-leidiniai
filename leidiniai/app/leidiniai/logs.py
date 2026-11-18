@@ -7,7 +7,7 @@ import sys
 FORMAT = "%(asctime)s %(levelname)-7s %(name)s: %(message)s"
 
 
-def setup_logging(settings) -> None:
+def setup_logging(settings, stdout_only: bool = False) -> None:
     root = logging.getLogger()
     root.setLevel(getattr(logging, settings.log_level.upper(), logging.INFO))
     for h in list(root.handlers):

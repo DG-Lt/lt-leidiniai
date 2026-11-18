@@ -34,3 +34,11 @@ Maxima and Rimi provide their own categories. Others: Lithuanian keyword diction
 ## Next steps
 1. Tune parsers per chain; add Šilas via Ollama + Qwen2.5-VL.
 2. Build the add-on: fetchers, scheduler, SQLite, web panel (ingress), HA sensors, logs download.
+
+## Site check 2026-11-19 (for the app fetchers)
+- **IKI**: iki.lt answered the cloud browser with a Cloudflare "Just a moment…" challenge. From the home IP it worked in a normal browser (prototype). The app tries a plain request, then headless Chromium; it never solves CAPTCHAs. If both are blocked, the run reports the problem.
+- **Lidl**: listing has Savaitės pasiūlymai (food `…-kw47-pr`, non-food `…-kw47`), catalogues (`maisto-idejos-kaledoms-2026`, `zaislai-2026`, `pasiulymas-lidliukams-2025kw18`), a store leaflet (`bajoru-kel-6-visoriai-kw47`) and alcohol (`skoniu-atradimai-2026-lapkritis`). API pages have `type` STANDARD / PROMOTION (comparison ads, no products) and `keyWords` per page; `startDate` = publish day, `offerStartDate/offerEndDate` = validity.
+- **Norfa**: one leaflet, text "NORFA Nr. 23 (523)" + "2026.11.12 - 2026.11.25"; download button is JS (`/leidiniai/download/1` from the prototype).
+- **Maxima**: /pasiulymai unchanged (offer cards, "Iki 11.23", "1 kg – 3,38 €", "Tik su AČIŪ kortele" icon, "3 vnt. už", "1+1", "nuo XX" store formats).
+- **Rimi**: listing page is https://www.rimi.lt/asortimentas/rimi-savaitinis-leidinys → weekly `2026/weekly/rimi-savaitinis-leidinys-nr-47/` plus catalogues under `2026/other/…` and `2026/alko/…`. leidiniai.rimi.lt root has no index.
+- **Šilas**: now Nr. 23 (2026-11-18 … 12-01), 12 pages; the page links one JPEG per page (`SLS23_01.jpg` …) and `SILAS_Nr23_2026.pdf`.

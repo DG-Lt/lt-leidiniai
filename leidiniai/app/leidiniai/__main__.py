@@ -17,8 +17,15 @@ def main() -> int:
     log.info("Leidiniai %s starting, data in %s, chains %s", __version__, settings.data_dir,
              ", ".join(settings.chains))
 
+    from . import db
+    from .schedule import Runner
+    with db.session(settings) as conn:
+        log.info("Database schema version %s", conn.execute("PRAGMA user_version").fetchone()[0])
+    runner = Runner(settings)
+    runner.start()
+
     from .web import create_app
-    app = create_app(settings)
+    app = create_app(settings, runner)
 
     from waitress import serve
 
