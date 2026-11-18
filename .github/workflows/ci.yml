@@ -22,7 +22,7 @@ jobs:
       - name: Smoke test (panel answers)
         run: |
           mkdir -p /tmp/data
-          docker run -d --name l -e LEIDINIAI_DEV=1 -p 8099:8099 -v /tmp/data:/data leidiniai:ci
+          docker run -d --name leidiniai-ci -e LEIDINIAI_DEV=1 -p 8099:8099 -v /tmp/data:/data leidiniai:ci
           for i in $(seq 1 30); do curl -fsS http://localhost:8099/ >/dev/null && break; sleep 2; done
           curl -fsS http://localhost:8099/ | grep -q "Pasiūlymai"
-          docker logs l
+          docker logs leidiniai-ci
