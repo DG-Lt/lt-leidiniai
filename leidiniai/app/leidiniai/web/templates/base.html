@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="lt">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Leidiniai{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}?v={{ version }}">
+</head>
+<body>
+<header>
+  <b>Leidiniai</b>
+  <nav>
+    {% set ep = request.endpoint %}
+    <a href="{{ url_for('ui.offers') }}" class="{{ 'on' if ep == 'ui.offers' }}">Pasiūlymai</a>
+    <a href="{{ url_for('ui.status') }}" class="{{ 'on' if ep == 'ui.status' }}">Būsena</a>
+  </nav>
+</header>
+<main>
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, m in msgs %}<p class="{{ cat }}">{{ m }}</p>{% endfor %}
+{% endwith %}
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

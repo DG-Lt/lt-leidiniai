@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% block title %}Pasiūlymai – Leidiniai{% endblock %}
+{% block content %}
+<h1>Šios savaitės pasiūlymai</h1>
+{% if not offers %}
+<p class="muted">Pasiūlymų dar nėra. Jie atsiras po pirmo leidinių tikrinimo.</p>
+{% endif %}
+{% endblock %}

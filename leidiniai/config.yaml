@@ -1,0 +1,46 @@
+name: Leidiniai
+version: "0.1.0"
+slug: leidiniai
+description: Lietuvos prekybos tinklų akcijų leidiniai (IKI, Rimi, Maxima, Norfa, Lidl, Šilas) – vietinis apdorojimas
+url: https://github.com/DG-Lt/lt-leidiniai
+arch:
+  - amd64
+startup: application
+boot: auto
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:tag-multiple
+panel_title: Leidiniai
+panel_admin: false
+services:
+  - mqtt:need
+backup: hot
+backup_exclude:
+  - "pdf/*"
+  - "cache/*"
+  - "tmp/*"
+options:
+  check_time: "03:30"
+  request_delay: 2
+  threads: 2
+  chains:
+    - iki
+    - lidl
+    - maxima
+    - norfa
+    - rimi
+    - silas
+  browser_fallback: true
+  keep_pdf_weeks: 8
+  keep_images_weeks: 12
+  log_level: info
+schema:
+  check_time: match(^([01][0-9]|2[0-3]):[0-5][0-9]$)
+  request_delay: float(0.5,30)
+  threads: int(1,4)
+  chains:
+    - list(iki|lidl|maxima|norfa|rimi|silas)
+  browser_fallback: bool
+  keep_pdf_weeks: int(1,104)
+  keep_images_weeks: int(1,520)
+  log_level: list(debug|info|warning|error)

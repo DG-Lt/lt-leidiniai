@@ -1,0 +1,5 @@
+# Local development and tests (the app image installs leidiniai/requirements.txt)
+-r leidiniai/requirements.txt
+pytest
+pyyaml
+reportlab

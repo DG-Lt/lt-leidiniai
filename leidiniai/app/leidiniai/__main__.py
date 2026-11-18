@@ -1,0 +1,35 @@
+"""Entry point: `python -m leidiniai` starts the web panel (and, from later steps, scheduler + MQTT)."""
+from __future__ import annotations
+
+import logging
+import signal
+import sys
+
+from . import __version__, config
+from .logs import setup_logging
+
+
+def main() -> int:
+    settings = config.load()
+    settings.ensure_dirs()
+    setup_logging(settings)
+    log = logging.getLogger("leidiniai")
+    log.info("Leidiniai %s starting, data in %s, chains %s", __version__, settings.data_dir,
+             ", ".join(settings.chains))
+
+    from .web import create_app
+    app = create_app(settings)
+
+    from waitress import serve
+
+    def stop(*_):
+        log.info("Stopping")
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, stop)
+    serve(app, host="0.0.0.0", port=settings.port, threads=4, ident=None)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
