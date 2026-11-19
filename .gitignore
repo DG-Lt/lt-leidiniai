@@ -1,7 +1,8 @@
 data/
 out/
 *.pdf
-!tests/fixtures/*.pdf
 __pycache__/
 *.pyc
 .venv/
+tests/fixtures/
+!tests/synthetic/*.pdf

@@ -1,7 +1,11 @@
 """Step 3: parsers, schema v2, store, categories, offer pages.
 
-Fixtures (tests/fixtures, built by tests/make_fixtures.py) are pages of the 2026-11 leaflets with the
-photos replaced by 1×1 placeholders. Expected values were checked against the page images by eye.
+Two kinds of test files:
+- tests/synthetic/ (committed, made-up content, built by tests/make_synthetic.py): a Norfa-like PDF page and a
+  Maxima-like offers page. Pipeline, store, panel and job tests use these, so CI needs no shop material.
+- tests/fixtures/ (NOT committed – shop material): pages of the 2026-11 leaflets with the photos blanked, built
+  locally by `python tests/make_fixtures.py <folder with the test files>`. The parser accuracy tests on real pages
+  run only when they are there (or LEIDINIAI_FIXTURES points to them); expected values were checked by eye.
 Full-file thresholds run only when LEIDINIAI_TESTDATA points to a folder with the full test files.
 """
 from __future__ import annotations
@@ -20,8 +24,13 @@ from leidiniai import db, pipeline, store
 from leidiniai.categories import CATEGORIES, Classifier
 from leidiniai.parsers import cents, maxima, pdf_text, rimi
 
-FX = Path(__file__).resolve().parent / "fixtures"
+FX = Path(os.environ.get("LEIDINIAI_FIXTURES") or Path(__file__).resolve().parent / "fixtures")
+SYN = Path(__file__).resolve().parent / "synthetic"
+NORFA_SYN = SYN / "norfa_synthetic.pdf"
+needs_fx = pytest.mark.skipif(not (FX / "norfa_523_p4.pdf").exists(),
+                              reason="real leaflet fixtures not present (local only: tests/make_fixtures.py)")
 LOG = logging.getLogger("test")
+NAME_KEY = "saltupio saltai rukyta desra 300 g"
 
 
 def by_name(offers, start):
@@ -50,6 +59,7 @@ def iki():
     return pdf_text.parse(FX / "iki_b47_p4-10-24-37.pdf", "iki")
 
 
+@needs_fx
 def test_iki_category_badges(iki):
     p1 = [o for o in iki if o.page == 1]  # leaflet p. 4: eight "-40 % / -50 %" brand offers, no prices
     assert len(p1) == 8 and all(o.kind == "badge" and o.price is None for o in p1)
@@ -57,6 +67,7 @@ def test_iki_category_badges(iki):
     assert by_name(p1, "Kosmetikai GARNIER").discount_pct == 40
 
 
+@needs_fx
 def test_iki_name_above_photo_price_below(iki):
     p2 = [o for o in iki if o.page == 2]  # leaflet p. 10
     assert len(p2) == 7
@@ -69,6 +80,7 @@ def test_iki_name_above_photo_price_below(iki):
     assert (d.price, d.unit_price, d.unit) == (79, 1580, "kg")
 
 
+@needs_fx
 def test_iki_split_badge_digits_and_old_prices(iki):
     p3 = [o for o in iki if o.page == 3]  # leaflet p. 24
     assert len(p3) == 7
@@ -79,6 +91,7 @@ def test_iki_split_badge_digits_and_old_prices(iki):
     assert by_name(p3, "Marinuotas ančiukas").discount_pct == 45
 
 
+@needs_fx
 def test_iki_multibuy(iki):
     p4 = [o for o in iki if o.page == 4]  # leaflet p. 37: "1+1" / "2+1" drawn plus sign
     assert len(p4) == 8
@@ -92,6 +105,7 @@ def lidl():
     return pdf_text.parse(FX / "lidl_kw47_p4-6.pdf", "lidl")
 
 
+@needs_fx
 def test_lidl_text_left_of_price(lidl):
     p2 = [o for o in lidl if o.page == 2]  # leaflet p. 6: bread
     assert len(p2) == 5 and all(o.ext_id for o in p2)
@@ -101,6 +115,7 @@ def test_lidl_text_left_of_price(lidl):
     assert by_name(p2, "DELUXE Citrinų ir aguonų keksas").price == 199
 
 
+@needs_fx
 def test_lidl_plus_second_item(lidl):
     p1 = [o for o in lidl if o.page == 1]  # leaflet p. 4
     assert all(o.name for o in p1), "the 'PERKANT 1 VNT.' price must merge into its deal"
@@ -110,6 +125,7 @@ def test_lidl_plus_second_item(lidl):
     assert (s.price, s.old_price) == (99, 139)
 
 
+@needs_fx
 def test_norfa(tmp_path):
     offers = pdf_text.parse(FX / "norfa_523_p4.pdf", "norfa")
     assert len(offers) == 13
@@ -123,12 +139,32 @@ def test_lidl_promotion_pages_skipped():
     meta = {"pages": [{"number": 1, "type": "STANDARD"}, {"number": 2, "type": "PROMOTION"}]}
     assert pdf_text.skip_pages("lidl", meta) == {2}
     assert pdf_text.skip_pages("iki", meta) == set()
+
+
+@needs_fx
+def test_lidl_promotion_page_not_parsed():
     assert [o.page for o in pdf_text.parse(FX / "lidl_kw47_p4-6.pdf", "lidl", skip_pages={2})] == [1] * 6
 
 
+def test_synthetic_norfa():
+    offers = pdf_text.parse(NORFA_SYN, "norfa")
+    assert len(offers) == 6
+    o = by_name(offers, "ŠALTUPIO šaltai rūkyta dešra")
+    assert (o.price, o.old_price, o.discount_pct, o.unit_price) == (249, 349, 29, 830)
+    assert by_name(offers, "Pienas ŪKIO").price == 109
+
+
+def test_synthetic_maxima():
+    offers = maxima.parse((SYN / "maxima_synthetic.html").read_text(encoding="utf-8"), date(2026, 11, 12))
+    assert len(offers) == 3
+    k = by_name(offers, "Kava ŠILAS")
+    assert (k.price, k.old_price, k.discount_pct, k.card, k.unit_price, k.valid_to, k.ext_category) == \
+        (699, 999, 30, True, 1398, date(2026, 11, 16), "Gėrimai")
+
+
 def test_crops(tmp_path):
-    offers = pdf_text.parse(FX / "norfa_523_p4.pdf", "norfa")
-    names = pdf_text.render_crops(FX / "norfa_523_p4.pdf", offers, tmp_path)
+    offers = pdf_text.parse(NORFA_SYN, "norfa")
+    names = pdf_text.render_crops(NORFA_SYN, offers, tmp_path)
     assert len(names) == len(offers)
     from PIL import Image
     im = Image.open(tmp_path / names[0])
@@ -137,6 +173,7 @@ def test_crops(tmp_path):
 
 # ---------------------------------------------------------------- Maxima, Rimi
 
+@needs_fx
 def test_maxima(tmp_path):
     html = gunzip("maxima_pasiulymai.html.gz", tmp_path).read_text(encoding="utf-8")
     offers = maxima.parse(html, date(2026, 11, 12))
@@ -152,6 +189,7 @@ def test_maxima(tmp_path):
     assert {o.ext_category for o in offers} <= {k[1] for k in __import__("leidiniai.categories").categories.SHOP_MAP if k[0] == "maxima"}
 
 
+@needs_fx
 def test_rimi(tmp_path):
     offers = rimi.parse(gunzip("rimi_nr46_enrichments.json.gz", tmp_path), gunzip("rimi_nr46_eshop.json.gz", tmp_path))
     assert len(offers) == 792 and len({o.ext_id for o in offers}) == 792
@@ -189,10 +227,11 @@ def add_issue(conn, chain, key, files, vf="2026-11-16", vt="2099-12-31", status=
                             (chain, key, "s", key, vf, vt, json.dumps(files), status, db.now_iso(), db.now_iso())).lastrowid
 
 
-def pdf_issue(conn, settings, chain="norfa", fx="norfa_523_p4.pdf", key="523"):
+def pdf_issue(conn, settings, chain="norfa", src=NORFA_SYN, key="523"):
     d = settings.pdf_dir / chain / key
     d.mkdir(parents=True)
-    shutil.copy(FX / fx, d / fx)
+    fx = src.name
+    shutil.copy(src, d / fx)
     return add_issue(conn, chain, key, [{"name": fx, "path": str(d / fx), "bytes": 1}])
 
 
@@ -202,26 +241,25 @@ def test_pipeline_parse_store_reparse(settings):
     summ = {"warnings": [], "errors": []}
     assert pipeline.parse_stored(conn, settings, iid, None, summ, LOG)
     row = conn.execute("SELECT * FROM issues WHERE id=?", (iid,)).fetchone()
-    assert (row["status"], row["offers"]) == ("parsed", 13) and summ["parsed"][0]["images"] == 13
-    o = conn.execute("SELECT * FROM offers WHERE name LIKE 'ĄŽUOLYNO%'").fetchone()
-    assert (o["price"], o["old_price"], o["name_key"], o["valid_to"]) == (199, 299, "azuolyno salta rukyta desra 260 g"
-                                                                         .replace("salta", "saltai"), "2099-12-31")
+    assert (row["status"], row["offers"]) == ("parsed", 6) and summ["parsed"][0]["images"] == 6
+    o = conn.execute("SELECT * FROM offers WHERE name LIKE 'ŠALTUPIO%'").fetchone()
+    assert (o["price"], o["old_price"], o["name_key"], o["valid_to"]) == (249, 349, NAME_KEY, "2099-12-31")
     assert (settings.img_dir / o["image"]).exists()
     # user correction survives a re-parse; products are not duplicated
     store.set_category(conn, o["product_id"], "pantry")
     n_products = conn.execute("SELECT COUNT(*) FROM products").fetchone()[0]
     assert pipeline.parse_stored(conn, settings, iid, None, {"warnings": [], "errors": []}, LOG)
     assert conn.execute("SELECT COUNT(*) FROM products").fetchone()[0] == n_products
-    assert conn.execute("SELECT COUNT(*) FROM offers WHERE issue_id=?", (iid,)).fetchone()[0] == 13
-    assert conn.execute("SELECT category FROM offers WHERE name LIKE 'ĄŽUOLYNO%'").fetchone()[0] == "pantry"
+    assert conn.execute("SELECT COUNT(*) FROM offers WHERE issue_id=?", (iid,)).fetchone()[0] == 6
+    assert conn.execute("SELECT category FROM offers WHERE name LIKE 'ŠALTUPIO%'").fetchone()[0] == "pantry"
 
 
 def test_keyword_learning_recategorises(settings):
     conn = db.open_db(settings)
     pipeline.parse_stored(conn, settings, pdf_issue(conn, settings), None, {"warnings": [], "errors": []}, LOG)
-    pid = conn.execute("SELECT product_id FROM offers WHERE name LIKE 'Vytinta JUBILIEJAUS%'").fetchone()[0]
-    store.set_category(conn, pid, "other", keyword="Vytinta")
-    cats = {r[0] for r in conn.execute("SELECT category FROM offers WHERE name_key LIKE 'vytinta%'")}
+    pid = conn.execute("SELECT product_id FROM offers WHERE name LIKE 'Kvietinė duona%'").fetchone()[0]
+    store.set_category(conn, pid, "other", keyword="Kvietinė")
+    cats = {r[0] for r in conn.execute("SELECT category FROM offers WHERE name_key LIKE 'kvietine%'")}
     assert cats == {"other"}
 
 
@@ -267,28 +305,28 @@ def test_offer_pages(settings, tmp_path):
     pipeline.parse_stored(conn, settings, iid, None, {"warnings": [], "errors": []}, LOG)
     mx = tmp_path / "mx" / "pasiulymai.html"
     mx.parent.mkdir()
-    shutil.copy(gunzip("maxima_pasiulymai.html.gz", tmp_path), mx)
+    shutil.copy(SYN / "maxima_synthetic.html", mx)
     mid = add_issue(conn, "maxima", "abc", [{"name": "pasiulymai.html", "path": str(mx), "bytes": 1}], vf="2026-11-12")
     pipeline.parse_stored(conn, settings, mid, None, {"warnings": [], "errors": []}, LOG)
     with conn:  # Maxima's 'Iki 11.16' is in the past for the test clock: move it
         conn.execute("UPDATE offers SET valid_to='2099-01-01' WHERE chain='maxima'")
     c = create_app(settings).test_client()
     t = c.get("/").get_data(as_text=True)
-    assert "Rasta: 129" in t and "ĄŽUOLYNO" in t and "kortelė" in t
-    t = c.get("/?q=azuolyno&chain=norfa").get_data(as_text=True)
+    assert "Rasta: 9" in t and "ŠALTUPIO" in t and "kortel" in t
+    t = c.get("/?q=saltupio&chain=norfa").get_data(as_text=True)
     assert "Rasta: 1" in t
-    assert "Rasta: 116" in c.get("/?chain=maxima").get_data(as_text=True)
+    assert "Rasta: 3" in c.get("/?chain=maxima").get_data(as_text=True)
     assert c.get("/?cat=fruit_veg&disc=1&sort=price&p=1").status_code == 200
-    pid = conn.execute("SELECT product_id FROM offers WHERE name LIKE 'ĄŽUOLYNO%'").fetchone()[0]
+    pid = conn.execute("SELECT product_id FROM offers WHERE name LIKE 'ŠALTUPIO%'").fetchone()[0]
     t = c.get(f"/produktas/{pid}").get_data(as_text=True)
-    assert "Kainų istorija" in t and "2.99 €" in t
+    assert "Kainų istorija" in t and "3.49 €" in t
     img = conn.execute("SELECT image FROM offers WHERE chain='norfa' LIMIT 1").fetchone()[0]
     assert c.get(f"/img/{img}").mimetype == "image/jpeg"
     assert c.get("/img/../leidiniai.db").status_code == 404
     # watch list
     assert c.post("/stebimi", data={"term": "Šaltai rūkyta", "back": "//evil.example"}).location.endswith("/stebimi")
     t = c.get("/stebimi").get_data(as_text=True)
-    assert "Šaltai rūkyta" in t and "SKILANDINĖ" in t
+    assert "Šaltai rūkyta" in t and "ŠALTUPIO" in t
     wid = conn.execute("SELECT id FROM watch").fetchone()[0]
     c.post(f"/stebimi/{wid}/salinti")
     assert conn.execute("SELECT COUNT(*) FROM watch").fetchone()[0] == 0
@@ -327,13 +365,13 @@ def test_job_downloads_and_parses(settings, monkeypatch):
         def discover(self):
             return [IssueInfo(chain="norfa", key="523", series="norfa", title="NORFA Nr. 23 (523)", number="23 (523)",
                               valid_from=date(2026, 11, 12), valid_to=date(2099, 11, 25), parser="pdf",
-                              prefetched={"Norfa523-Web2.pdf": (FX / "norfa_523_p4.pdf").read_bytes()})]
+                              prefetched={"Norfa523-Web2.pdf": NORFA_SYN.read_bytes()})]
 
     monkeypatch.setattr(fetchers, "get", lambda chain: FakeNorfa)
     s = job.run("norfa", "manual", settings)
     assert s["status"] == "ok", s
-    assert s["parsed"][0]["offers"] == 13 and s["parsed"][0]["images"] == 13
+    assert s["parsed"][0]["offers"] == 6 and s["parsed"][0]["images"] == 6
     conn = db.open_db(settings)
-    assert conn.execute("SELECT status, offers FROM issues").fetchone()[:] == ("parsed", 13)
+    assert conn.execute("SELECT status, offers FROM issues").fetchone()[:] == ("parsed", 6)
     s2 = job.run("norfa", "manual", settings)  # nothing new: no second parse
     assert s2["status"] == "ok" and not s2.get("parsed")

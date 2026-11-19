@@ -1,5 +1,8 @@
 """Build the small parser fixtures in tests/fixtures/ from full leaflet files (dev tool, not run by CI).
 
+The output is shop material and is NOT committed (tests/fixtures/ is in .gitignore); the real-page
+parser tests run only where it exists.
+
     python tests/make_fixtures.py <folder with the test files>
 
 PDFs: only the pages listed below, every image replaced by a 1×1 grey JPEG (positions and sizes on the
