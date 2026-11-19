@@ -1,0 +1,24 @@
+configuration:
+  check_time:
+    name: Night check time
+    description: Local time (HH:MM) of the nightly check. Only chains whose leaflet ends within 2 days (or with no leaflet yet) are checked.
+  request_delay:
+    name: Seconds between requests
+    description: Pause between two requests to the same shop site.
+  threads:
+    name: Worker threads
+    description: Threads used for PDF parsing and page rendering (keep 2–3, HA shares the CPU).
+  chains:
+    name: Chains
+    description: Which chains to collect.
+  browser_fallback:
+    name: Headless browser fallback
+    description: Use a headless Chromium when a plain request is blocked or the page needs JavaScript (Rimi always needs it).
+  keep_pdf_weeks:
+    name: Keep PDFs (weeks)
+    description: Downloaded leaflet files older than this are deleted (offers and prices stay).
+  keep_images_weeks:
+    name: Keep product pictures (weeks)
+    description: Product crops older than this are deleted (offers and prices stay).
+  log_level:
+    name: Log level

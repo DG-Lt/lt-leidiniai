@@ -1,0 +1,24 @@
+configuration:
+  check_time:
+    name: Nakties tikrinimo laikas
+    description: Vietinis laikas (HH:MM). Tikrinami tik tie tinklai, kurių leidinys baigiasi per 2 dienas (arba dar neturimas).
+  request_delay:
+    name: Pauzė tarp užklausų (s)
+    description: Pauzė tarp dviejų užklausų į tą pačią parduotuvės svetainę.
+  threads:
+    name: Gijų skaičius
+    description: Gijos PDF apdorojimui ir puslapių piešimui (2–3, HA dalinasi procesoriumi).
+  chains:
+    name: Tinklai
+    description: Kuriuos tinklus rinkti.
+  browser_fallback:
+    name: Naršyklė be lango (atsarginis būdas)
+    description: Naudoti Chromium be lango, kai paprasta užklausa blokuojama arba puslapiui reikia JavaScript (Rimi – visada).
+  keep_pdf_weeks:
+    name: Laikyti PDF (savaitės)
+    description: Senesni leidinių failai ištrinami (pasiūlymai ir kainos lieka).
+  keep_images_weeks:
+    name: Laikyti prekių nuotraukas (savaitės)
+    description: Senesnės nuotraukų iškarpos ištrinamos (pasiūlymai ir kainos lieka).
+  log_level:
+    name: Žurnalo lygis
