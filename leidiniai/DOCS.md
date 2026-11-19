@@ -11,7 +11,13 @@ Open the **Leidiniai** panel in the sidebar. Options are explained in the Config
   "Įsiminti raktažodį" (remember keyword) teaches the category dictionary; all products not set by hand are
   then sorted again.
 - **Stebimi** – the watch list: words to look for in every new leaflet, with the matching offers.
-- **Leidiniai** – leaflets found, their state, the last checks and a "check now" button.
+- **Leidiniai** – leaflets found, their state, the last checks (click one for its summary) and a "check now" button.
+- **Būsena** – version, options, the last log lines and **Atsisiųsti žurnalus**.
+
+## Logs
+Logs are in the app's **Log** tab and in `/data/logs/leidiniai.log` (5 MB × 10 files). When something looks
+wrong, press **Atsisiųsti žurnalus** on the Būsena page: the ZIP holds the log files, the last 20 check
+summaries and `env.json` (version, options, database counts, disk use). It contains no passwords.
 
 Offers are read from the leaflet as printed. Some cells of a leaflet are hard to read automatically:
 an offer without a name shows its picture so you can still see it. Rimi prices come from the Rimi e-shop
