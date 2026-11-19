@@ -27,10 +27,11 @@ class IngressPrefix:
         return self.wsgi_app(environ, start_response)
 
 
-def create_app(settings, runner=None) -> Flask:
+def create_app(settings, runner=None, mqtt=None) -> Flask:
     app = Flask(__name__)
     app.config["SETTINGS"] = settings
     app.config["RUNNER"] = runner
+    app.config["MQTT"] = mqtt
     app.secret_key = "leidiniai-ingress"  # flash messages only; access is limited to HA ingress
     app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
     app.wsgi_app = IngressPrefix(app.wsgi_app)

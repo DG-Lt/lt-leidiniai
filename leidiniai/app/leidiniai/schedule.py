@@ -83,9 +83,10 @@ def child_env(settings) -> dict:
 class Runner:
     """Runs one chain check at a time as a nice'd child process; nightly scheduling + manual queue."""
 
-    def __init__(self, settings, on_done=None):
+    def __init__(self, settings, on_done=None, on_start=None):
         self.settings = settings
         self.on_done = on_done or (lambda chain, run_id: None)
+        self.on_start = on_start or (lambda chain: None)
         self.q: queue.Queue = queue.Queue()
         self.current: str | None = None
         self._stop = threading.Event()
@@ -155,6 +156,10 @@ class Runner:
 
     def _run(self, chain, trigger):
         self.current = chain
+        try:
+            self.on_start(chain)
+        except Exception:
+            log.exception("before-run hook failed")
         cmd = [sys.executable, "-m", "leidiniai.job", chain, "--trigger", trigger]
         if shutil.which("ionice"):
             cmd = ["ionice", "-c", "3"] + cmd

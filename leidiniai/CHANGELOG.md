@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0
+- Home Assistant entities over MQTT discovery (needs the Mosquitto broker app; credentials come from the
+  Supervisor): a leaflet sensor per chain, **Naujas leidinys** event, **Stebimi akcijose** (watched offers valid
+  today), **Problema**, **Tikrinti dabar** button, last and next check times. See the Documentation tab.
+- Būsena shows whether MQTT is connected.
+
 ## 0.3.0
 - Log files: `/data/logs/leidiniai.log`, 5 MB × 10 rotating; checks run in a child process keep their
   warning/error level in the file.
