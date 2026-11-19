@@ -14,6 +14,35 @@ Open the **Leidiniai** panel in the sidebar. Options are explained in the Config
 - **Leidiniai** – leaflets found, their state, the last checks (click one for its summary) and a "check now" button.
 - **Būsena** – version, options, the last log lines and **Atsisiųsti žurnalus**.
 
+## Home Assistant entities
+Install the **Mosquitto broker** app and the MQTT integration first; Leidiniai finds the broker by itself.
+All entities belong to the device **Leidiniai**:
+
+| Entity | Shows |
+|---|---|
+| `sensor.leidiniai_<chain>_leaflet` (iki, lidl, maxima, norfa, rimi, silas) | title of the leaflet valid today; attributes `valid_from`, `valid_to`, `offers`, `url`, `current`, `upcoming`, `last_check`, `last_error` |
+| `event.leidiniai_new_leaflet` | fires `new_leaflet` once per leaflet that is ready to look at, with `chain`, `chain_name`, `title`, `valid_from`, `valid_to`, `offers`, `url` |
+| `sensor.leidiniai_watched_on_sale` | how many watched (Stebimi) offers are valid today; attribute `items` (name, chain, price €, old price, discount, card, valid to – up to 40) |
+| `binary_sensor.leidiniai_problem` | on when a check or a leaflet failed; attribute `problems` |
+| `button.leidiniai_check_now` | queues a check of all chains |
+| `sensor.leidiniai_last_run`, `sensor.leidiniai_next_check` | time of the last finished / next check |
+
+Example – a phone notification for each new leaflet:
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: event.leidiniai_new_leaflet
+    not_from: unavailable
+actions:
+  - action: notify.mobile_app_my_phone
+    data:
+      title: "Naujas {{ trigger.to_state.attributes.chain_name }} leidinys"
+      message: >-
+        {{ trigger.to_state.attributes.title }} ({{ trigger.to_state.attributes.valid_from }} –
+        {{ trigger.to_state.attributes.valid_to }}), pasiūlymų: {{ trigger.to_state.attributes.offers }}
+```
+
 ## Logs
 Logs are in the app's **Log** tab and in `/data/logs/leidiniai.log` (5 MB × 10 files). When something looks
 wrong, press **Atsisiųsti žurnalus** on the Būsena page: the ZIP holds the log files, the last 20 check

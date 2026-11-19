@@ -14,7 +14,9 @@ def settings():
 def status():
     from .. import logs
     s = settings()
-    return render_template("status.html", options=s.public(), log_tail=logs.tail(s, 150),
+    m = current_app.config.get("MQTT")
+    mqtt = "prisijungta" if m and m.connected else "neprisijungta" if m else "išjungta"
+    return render_template("status.html", options=s.public(), log_tail=logs.tail(s, 150), mqtt=mqtt,
                            run_files=len(logs.run_summary_files(s)))
 
 

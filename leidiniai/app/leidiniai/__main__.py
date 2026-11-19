@@ -1,4 +1,4 @@
-"""Entry point: `python -m leidiniai` starts the web panel (and, from later steps, scheduler + MQTT)."""
+"""Entry point: `python -m leidiniai` starts the web panel, the scheduler and the MQTT bridge."""
 from __future__ import annotations
 
 import logging
@@ -22,15 +22,28 @@ def main() -> int:
     with db.session(settings) as conn:
         log.info("Database schema version %s", conn.execute("PRAGMA user_version").fetchone()[0])
     runner = Runner(settings)
+    from .mqtt import Bridge
+    bridge = Bridge(settings, runner)
+    try:
+        if bridge.start():
+            runner.on_start = bridge.on_run_start
+            runner.on_done = bridge.on_run_done
+        else:
+            bridge = None
+    except Exception:
+        log.exception("MQTT could not start; the panel still works")
+        bridge = None
     runner.start()
 
     from .web import create_app
-    app = create_app(settings, runner)
+    app = create_app(settings, runner, bridge)
 
     from waitress import serve
 
     def stop(*_):
         log.info("Stopping")
+        if bridge:
+            bridge.stop()
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, stop)

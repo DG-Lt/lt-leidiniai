@@ -30,6 +30,13 @@ def settings():
     return current_app.config["SETTINGS"]
 
 
+def mqtt_refresh():
+    """Watch list changed: update the HA 'watched on sale' sensor."""
+    m = current_app.config.get("MQTT")
+    if m:
+        m.refresh()
+
+
 def watch_terms(conn) -> list:
     return conn.execute("SELECT * FROM watch ORDER BY term").fetchall()
 
@@ -210,6 +217,7 @@ def watch_add():
         with conn:
             conn.execute("INSERT INTO watch(term,term_key,chain,created) VALUES(?,?,?,?) ON CONFLICT(term_key) DO NOTHING",
                          (term, key, chain, db.now_iso()))
+    mqtt_refresh()
     flash(f"Stebima: „{term}“.", "ok")
     safe = back.startswith("/") and not back.startswith("//")
     return redirect(back if safe else url_for("offers.watch"))
@@ -220,5 +228,6 @@ def watch_delete(wid):
     with db.session(settings()) as conn:
         with conn:
             conn.execute("DELETE FROM watch WHERE id=?", (wid,))
+    mqtt_refresh()
     flash("Pašalinta iš stebimų.", "ok")
     return redirect(url_for("offers.watch"))
