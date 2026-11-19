@@ -9,7 +9,8 @@ Status: **in development** (app built in steps, see the pull requests). Design a
 |---|---|
 | `repository.yaml` | Makes the clone a Home Assistant app repository (local apps) |
 | `leidiniai/` | The Home Assistant app: `config.yaml`, `Dockerfile`, Python package in `app/leidiniai/` |
-| `tests/` | pytest tests (`pip install -r requirements-dev.txt`, then `pytest`) |
+| `tests/` | pytest tests (`pip install -r requirements-dev.txt`, then `pytest`); `LEIDINIAI_TESTDATA=<folder>` also runs the full-leaflet checks |
+| `tests/fixtures/` | Leaflet pages with the photos blanked, Maxima HTML, Rimi JSON (built by `tests/make_fixtures.py`, needs `pikepdf`) |
 | `docs/findings.md` | How each chain publishes its leaflet, decisions, prototype results |
 | `prototype/` | First extraction test (Python) on the week 46/47 leaflets |
 
@@ -20,6 +21,14 @@ cd leidiniai/app
 LEIDINIAI_DEV=1 LEIDINIAI_DATA=/tmp/leidiniai python -m leidiniai   # http://localhost:8099
 ```
 `LEIDINIAI_DEV=1` turns off the ingress-only check.
+
+## Trying a parser on a file
+```
+cd leidiniai/app
+python -m leidiniai.parsers iki ~/Downloads/B47-bazinis_www.pdf --pages 10,24 > iki.json
+python -m leidiniai.parsers maxima maxima_pasiulymai.html --ref 2026-11-12
+python -m leidiniai.parsers rimi enrichments.json eshop.json
+```
 
 ## Running the prototype
 Needs Python 3.11+ and `pip install -r prototype/requirements.txt`.

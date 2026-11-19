@@ -46,6 +46,8 @@ def create_app(settings, runner=None) -> Flask:
             abort(403)
         return None
 
+    from .offers import bp as offers_bp
     from .views import bp
     app.register_blueprint(bp)
+    app.register_blueprint(offers_bp)
     return app

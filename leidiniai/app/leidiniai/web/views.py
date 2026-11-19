@@ -10,17 +10,13 @@ def settings():
     return current_app.config["SETTINGS"]
 
 
-@bp.get("/")
-def offers():
-    return render_template("offers.html", offers=[], total=0)
-
-
 @bp.get("/busena")
 def status():
     return render_template("status.html", options=settings().public())
 
 
-STATUS_LT = {"new": "naujas", "downloaded": "atsisiųstas", "parsed": "apdorotas", "waiting_parser": "laukia skaitytuvo",
+STATUS_LT = {"new": "naujas", "downloaded": "atsisiųstas", "parsed": "apdorotas", "parse_failed": "skaitymo klaida",
+             "waiting_parser": "laukia skaitytuvo",
              "failed": "klaida", "expired": "pasibaigęs", "superseded": "pakeistas naujesniu"}
 
 

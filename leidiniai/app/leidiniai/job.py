@@ -1,6 +1,6 @@
 """One chain check, run as a low-priority child process: `python -m leidiniai.job <chain> [--trigger X]`.
 
-discover → store/refresh issues → download new ones → (step 3: parse). Logs go to stdout; the parent
+discover → store/refresh issues → download new ones → parse (pipeline.py) → clean-up. Logs go to stdout; the parent
 process relays them into its log. A summary is stored in `runs`.
 """
 from __future__ import annotations
@@ -13,7 +13,7 @@ import time
 import traceback
 from datetime import date
 
-from . import config, db, fetchers
+from . import config, db, fetchers, pipeline
 from .http import Http
 from .logs import setup_logging
 
@@ -93,16 +93,16 @@ def run(chain: str, trigger: str, settings) -> dict:
                                               "seconds": round(time.monotonic() - t, 1)})
                 log.info("%s: downloaded %s (%d file(s), %s bytes)", chain, info.key, len(files),
                          sum(x["bytes"] for x in files))
-                from . import pipeline
                 pipeline.after_download(conn, settings, iid, info, summary, log)
             except Exception as e:
                 status = "error"
                 msg = f"{info.key}: {e}"
                 summary["errors"].append(msg)
-                log.error("%s: download/parse failed for %s: %s", chain, info.key, e)
+                log.error("%s: download failed for %s: %s", chain, info.key, e)
                 log.debug(traceback.format_exc())
                 with conn:
                     conn.execute("UPDATE issues SET status='failed', error=?, attempts=attempts+1 WHERE id=?", (str(e)[:500], iid))
+        pipeline.retry_parses(conn, settings, chain, summary, log)
         # newer issue of the same series replaces older snapshots (Maxima)
         if chain == "maxima" and infos:
             with conn:
@@ -115,6 +115,15 @@ def run(chain: str, trigger: str, settings) -> dict:
         log.debug(traceback.format_exc())
     finally:
         http.close()
+    try:
+        summary["cleanup"] = pipeline.housekeep(conn, settings, log)
+    except Exception as e:
+        summary["warnings"].append(f"clean-up failed: {e}")
+        log.warning("clean-up failed: %s", e)
+    if status != "error" and summary["errors"]:  # parse failures are recorded without an exception
+        status = "error"
+    elif status == "ok" and summary["warnings"]:
+        status = "warning"
     summary["http"] = http.stats()
     summary["timings"]["total_s"] = round(time.monotonic() - t0, 1)
     summary["status"] = status

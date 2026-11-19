@@ -22,7 +22,7 @@ MIGRATIONS: list[str] = [
         source_url    TEXT,
         files         TEXT NOT NULL DEFAULT '[]',  -- JSON [{url, name, path, sha256, bytes}]
         meta          TEXT NOT NULL DEFAULT '{}',  -- JSON, chain specific
-        status        TEXT NOT NULL DEFAULT 'new', -- new|downloaded|parsed|waiting_parser|failed|expired|superseded
+        status        TEXT NOT NULL DEFAULT 'new', -- new|downloaded|parsed|parse_failed|waiting_parser|failed|expired|superseded
         attempts      INTEGER NOT NULL DEFAULT 0,
         offers        INTEGER,
         error         TEXT,
@@ -51,6 +51,79 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX runs_chain ON runs (chain, started);
     CREATE TABLE kv (key TEXT PRIMARY KEY, value TEXT);
+    """,
+    # 2 – products, offers (prices in cents), watch list, category dictionary and shop category map
+    """
+    CREATE TABLE products (
+        id              INTEGER PRIMARY KEY,
+        chain           TEXT NOT NULL,
+        ident           TEXT NOT NULL,          -- shop product id when stable (Lidl code, Rimi id), else name_key
+        name            TEXT NOT NULL,          -- as printed (latest)
+        name_key        TEXT NOT NULL,          -- plain-letter key (textutil.fold)
+        quantity        TEXT,
+        category        TEXT NOT NULL DEFAULT 'other',  -- English id (categories.CATEGORIES)
+        category_source TEXT,                   -- user|shop|keyword|shop_weak|none
+        category_locked INTEGER NOT NULL DEFAULT 0,      -- 1 = set by the user, never recomputed
+        image           TEXT,                   -- latest image (local crop path under img/ or remote URL)
+        first_seen      TEXT NOT NULL,
+        last_seen       TEXT NOT NULL,
+        UNIQUE (chain, ident)
+    );
+    CREATE INDEX products_key ON products (name_key);
+    CREATE INDEX products_cat ON products (category);
+    CREATE TABLE offers (
+        id            INTEGER PRIMARY KEY,
+        issue_id      INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+        product_id    INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+        chain         TEXT NOT NULL,
+        seq           INTEGER NOT NULL,         -- order in the leaflet
+        page          INTEGER,
+        kind          TEXT NOT NULL,            -- price|badge|offer|hotspot
+        name          TEXT NOT NULL,            -- as printed in this leaflet
+        name_key      TEXT NOT NULL,
+        price         INTEGER,                  -- cents
+        old_price     INTEGER,
+        discount_pct  INTEGER,
+        discount_text TEXT,
+        unit_price    INTEGER,
+        unit          TEXT,
+        quantity      TEXT,
+        card          INTEGER NOT NULL DEFAULT 0,
+        card_text     TEXT,
+        valid_from    TEXT,                     -- offer dates, else the leaflet's
+        valid_to      TEXT,
+        category      TEXT NOT NULL DEFAULT 'other',
+        ext_id        TEXT,
+        ext_category  TEXT,
+        image         TEXT,
+        flags         TEXT NOT NULL DEFAULT '[]',
+        extra         TEXT NOT NULL DEFAULT '{}'
+    );
+    CREATE INDEX offers_issue ON offers (issue_id);
+    CREATE INDEX offers_product ON offers (product_id, valid_from);
+    CREATE INDEX offers_valid ON offers (valid_to);
+    CREATE TABLE watch (
+        id        INTEGER PRIMARY KEY,
+        term      TEXT NOT NULL,                -- as typed
+        term_key  TEXT NOT NULL UNIQUE,         -- plain-letter key, matched as a substring of offers.name_key
+        chain     TEXT,                         -- NULL = all chains
+        created   TEXT NOT NULL,
+        last_hit  TEXT
+    );
+    CREATE TABLE category_keywords (
+        keyword_key TEXT PRIMARY KEY,           -- plain-letter stem or phrase
+        category    TEXT NOT NULL,
+        source      TEXT NOT NULL DEFAULT 'user',
+        created     TEXT NOT NULL
+    );
+    CREATE TABLE category_map (
+        chain        TEXT NOT NULL,
+        ext_category TEXT NOT NULL,             -- Maxima section name, Rimi SH code (prefix)
+        category     TEXT NOT NULL,
+        strength     TEXT NOT NULL DEFAULT 'strong',  -- strong = decides alone, weak = after keywords
+        PRIMARY KEY (chain, ext_category)
+    );
+    ALTER TABLE issues ADD COLUMN parse_attempts INTEGER NOT NULL DEFAULT 0;
     """,
 ]
 

@@ -42,3 +42,37 @@ Maxima and Rimi provide their own categories. Others: Lithuanian keyword diction
 - **Maxima**: /pasiulymai unchanged (offer cards, "Iki 11.23", "1 kg – 3,38 €", "Tik su AČIŪ kortele" icon, "3 vnt. už", "1+1", "nuo XX" store formats).
 - **Rimi**: listing page is https://www.rimi.lt/asortimentas/rimi-savaitinis-leidinys → weekly `2026/weekly/rimi-savaitinis-leidinys-nr-47/` plus catalogues under `2026/other/…` and `2026/alko/…`. leidiniai.rimi.lt root has no index.
 - **Šilas**: now Nr. 23 (2026-11-18 … 12-01), 12 pages; the page links one JPEG per page (`SLS23_01.jpg` …) and `SILAS_Nr23_2026.pdf`.
+
+## Parsers in the app (step 3, 2026-11-19) — `leidiniai/app/leidiniai/parsers/`
+Checked page by page against the week 46/47 files; regression pages in `tests/fixtures/`.
+- **Layout rule (IKI, Lidl, Norfa):** product text is always left of or above its own price. Text blocks go to
+  the price with the lowest cost; prices wholly left of / above a block pay `(distance + 25) × penalty`
+  (Lidl 3/3, Norfa 3/2, IKI left 3 / above 10). IKI prints the name above the photo and the price below it
+  (up to ~200 pt apart), so far links need the block and the price to share a column.
+- **Unit prices** ("1 kg = 5,98 €", "9,45 Eur/kg") are recognised before old prices: the prototype read most
+  Lidl/IKI unit prices as old prices.
+- **IKI:** badge numbers are set digit by digit ("4" "8" "%") → touching same-size digits are joined; "1+1"/"2+1"
+  badges have a drawn plus sign (two big digits ~16 pt apart); "SUTAUPOTE x" under multi-buy prices is the
+  saving, not an old price; green hearts "TIK ♥♥♥" are pictures (card/app price not detected yet).
+- **Lidl:** headline text up to 12.6 pt; 5–7 digit product code ends a text block and is the product id;
+  "PERKANT 1 VNT. 1,39" + "Antram su Lidl Plus -68% 0,45" = one offer (single price kept with it).
+- **Norfa:** a few cells hold two products with one price; "Su pipirais" variants under a price can attach to
+  the neighbour.
+- Rotated/tracked lettering comes out letter by letter → non-upright characters dropped, runs of single letters removed.
+- **Maxima** (116 cards): all carry "Tik su AČIŪ kortele"; forms: price + old + "-NN%", discount-only
+  (category offers, `discount-value`), "2 vnt. už"/"3 vnt. už"/"1+1" benefit, "nuo" label; unit "1 kg – x €"
+  or "1 kg ≤ x €"; dates "Iki 11.16" / "Iki 12.07".
+- **Rimi** e-shop card text forms: leading "3 49 € 23,27 €/kg" = card (Mano Rimi) price with the shelf price
+  "4.49 € už vnt." after the name; "… 2.87 € už vnt. … Įprasta kaina: 3,59 €" = general discount; "Šiuo metu
+  prekės nėra" = not available. Hotspots with many codes (brand offers) list up to 40 products: all are kept
+  (792 products from 217 lookups). The leading price being the Mano Rimi price is an assumption from the
+  e-shop layout.
+- Rimi `SH-` codes (inferred from product names): 1 alcohol (incl. non-alcoholic beer mixes), 2 pantry (broad),
+  3 bakery, 4 drinks, 5 pets, 6 hygiene, 7 baby, 8 flowers, 9 meat/fish/ready meals (broad), 10 household,
+  11 dairy, 12 sweets, 13 frozen, 14 toys/home, 15 fruit & veg, 19 pantry, 20 sweets, 77 plant-based spreads.
+- Results on the full files: Lidl 233 offers (232 named, 180 unit prices, 54 Lidl Plus), Norfa 345
+  (334 with a real name, 237 old prices), IKI 445 (422 named, 146 brand/category badges), Maxima 116, Rimi 792.
+  Parse + crops: IKI 65 pages ≈ 40 s, Lidl ≈ 5 s, Norfa ≈ 10 s on this test machine; crops ≈ 26 MB per week.
+- Categories: shop category when it is specific, else a Lithuanian stem dictionary on the head noun (the last
+  matching word of the name's first phrase), else a broad shop category, else "Kita". Unsorted on the test
+  files: Lidl 14/233, Norfa 54/345, IKI 58/445.

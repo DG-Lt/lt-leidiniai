@@ -25,8 +25,8 @@
     <td>{{ CHAIN_NAMES[i.chain] }}</td>
     <td>{% if i.source_url %}<a href="{{ i.source_url }}" target="_blank" rel="noopener">{{ i.title }}</a>{% else %}{{ i.title }}{% endif %}</td>
     <td>{{ i.valid_from|day }} – {{ i.valid_to|day }}</td>
-    <td class="{{ 'err' if i.status == 'failed' }}" title="{{ i.error or '' }}">{{ status_lt.get(i.status, i.status) }}</td>
-    <td class="num">{{ i.offers|number if i.offers is not none else '–' }}</td>
+    <td class="{{ 'err' if i.status in ('failed', 'parse_failed') }}" title="{{ i.error or '' }}">{{ status_lt.get(i.status, i.status) }}</td>
+    <td class="num">{% if i.offers %}<a href="{{ url_for('offers.offers', chain=i.chain, when='all', sort='leaflet') }}">{{ i.offers|number }}</a>{% else %}{{ i.offers|number if i.offers is not none else '–' }}{% endif %}</td>
     <td>{{ i.first_seen|dt }}</td>
   </tr>
   {% else %}<tr><td colspan="6" class="muted">Dar nėra.</td></tr>{% endfor %}
