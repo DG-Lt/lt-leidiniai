@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_offer.html" import offer_card with context %}
+{% block title %}Stebimi – Leidiniai{% endblock %}
+{% block content %}
+<h1>Stebimi</h1>
+<form class="filters" method="post" action="{{ url_for('offers.watch_add') }}">
+  <label>Ko ieškoti <input name="term" placeholder="pvz. sviestas, Rokiškio" required minlength="3"></label>
+  <label>Tinklas <select name="chain"><option value="">Visi</option>
+    {% for c, n in CHAIN_NAMES.items() %}<option value="{{ c }}">{{ n }}</option>{% endfor %}</select></label>
+  <button>Pridėti</button>
+</form>
+<p class="muted small">Ieškoma pavadinime be lietuviškų raidžių ir didžiųjų raidžių skirtumo: „sviest“ ras „Sviestas“ ir „SVIESTAS“.</p>
+{% if not terms %}<p class="muted">Stebimų prekių dar nėra.</p>{% endif %}
+{% for t in terms %}
+<section class="watchterm">
+  <h2>{{ t.term }}{% if t.chain %} <span class="muted">({{ CHAIN_NAMES[t.chain] }})</span>{% endif %}
+    <span class="muted small">– {{ hits[t.id]|length }} pasiūl.</span>
+    <form method="post" action="{{ url_for('offers.watch_delete', wid=t.id) }}" class="inline"><button class="secondary small">Šalinti</button></form>
+  </h2>
+  {% if hits[t.id] %}
+  <div class="grid">{% for o in hits[t.id][:24] %}{{ offer_card(o, true) }}{% endfor %}</div>
+  {% if hits[t.id]|length > 24 %}<p><a href="{{ url_for('offers.offers', q=t.term_key, chain=t.chain or '', when='all', sort='price') }}">Visi {{ hits[t.id]|length }} ›</a></p>{% endif %}
+  {% else %}<p class="muted">Šiuo metu akcijose nėra.</p>{% endif %}
+</section>
+{% endfor %}
+{% endblock %}

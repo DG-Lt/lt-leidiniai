@@ -11,7 +11,9 @@
   <b>Leidiniai</b>
   <nav>
     {% set ep = request.endpoint %}
-    <a href="{{ url_for('ui.offers') }}" class="{{ 'on' if ep == 'ui.offers' }}">Pasiūlymai</a>
+    <a href="{{ url_for('offers.offers') }}" class="{{ 'on' if ep in ('offers.offers', 'offers.product') }}">Pasiūlymai</a>
+    <a href="{{ url_for('offers.watch') }}" class="{{ 'on' if ep == 'offers.watch' }}">Stebimi</a>
+    <a href="{{ url_for('ui.leaflets') }}" class="{{ 'on' if ep == 'ui.leaflets' }}">Leidiniai</a>
     <a href="{{ url_for('ui.status') }}" class="{{ 'on' if ep == 'ui.status' }}">Būsena</a>
   </nav>
 </header>

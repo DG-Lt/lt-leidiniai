@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Leidiniai – būsena{% endblock %}
+{% block content %}
+<h1>Leidiniai</h1>
+{% if running %}<p class="warn">Dabar tikrinama: {{ CHAIN_NAMES[running] }}</p>{% endif %}
+<table>
+  <tr><th>Tinklas</th><th>Paskutinis tikrinimas</th><th>Kitas tikrinimas</th><th>Klaida</th><th></th></tr>
+  {% for c in chains %}
+  <tr>
+    <td>{{ CHAIN_NAMES[c.chain] }}</td>
+    <td>{{ c.state.last_check|dt if c.state else '–' }}</td>
+    <td>{{ c.next|dt }}{% if c.due %} <span class="muted">({{ c.reason }})</span>{% endif %}</td>
+    <td class="err">{{ c.state.last_error if c.state and c.state.last_error else '' }}</td>
+    <td><form method="post" action="{{ url_for('ui.check_now') }}"><input type="hidden" name="chain" value="{{ c.chain }}"><button class="secondary">Tikrinti dabar</button></form></td>
+  </tr>
+  {% endfor %}
+</table>
+<form method="post" action="{{ url_for('ui.check_now') }}" style="margin-top:.6rem"><input type="hidden" name="chain" value="all"><button>Tikrinti visus dabar</button></form>
+
+<h2>Leidiniai</h2>
+<table>
+  <tr><th>Tinklas</th><th>Leidinys</th><th>Galioja</th><th>Būsena</th><th class="num">Pasiūlymai</th><th>Pirmą kartą matytas</th></tr>
+  {% for i in issues %}
+  <tr>
+    <td>{{ CHAIN_NAMES[i.chain] }}</td>
+    <td>{% if i.source_url %}<a href="{{ i.source_url }}" target="_blank" rel="noopener">{{ i.title }}</a>{% else %}{{ i.title }}{% endif %}</td>
+    <td>{{ i.valid_from|day }} – {{ i.valid_to|day }}</td>
+    <td class="{{ 'err' if i.status in ('failed', 'parse_failed') }}" title="{{ i.error or '' }}">{{ status_lt.get(i.status, i.status) }}</td>
+    <td class="num">{% if i.offers %}<a href="{{ url_for('offers.offers', chain=i.chain, when='all', sort='leaflet') }}">{{ i.offers|number }}</a>{% else %}{{ i.offers|number if i.offers is not none else '–' }}{% endif %}</td>
+    <td>{{ i.first_seen|dt }}</td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="muted">Dar nėra.</td></tr>{% endfor %}
+</table>
+
+<h2>Paskutiniai tikrinimai</h2>
+<table>
+  <tr><th>Pradžia</th><th>Tinklas</th><th>Priežastis</th><th>Rezultatas</th></tr>
+  {% for r in runs %}
+  <tr><td>{{ r.started|dt }}</td><td>{{ CHAIN_NAMES[r.chain] }}</td><td>{{ r.trigger }}</td>
+      <td class="{{ 'ok' if r.status == 'ok' else 'err' if r.status == 'error' else 'warn' }}">{{ r.status }}</td></tr>
+  {% else %}<tr><td colspan="4" class="muted">Dar nėra.</td></tr>{% endfor %}
+</table>
+{% endblock %}

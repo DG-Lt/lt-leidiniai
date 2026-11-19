@@ -16,11 +16,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     LANG=C.UTF-8
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends util-linux tzdata ca-certificates \
+ && apt-get install -y --no-install-recommends util-linux tzdata ca-certificates libatomic1 \
  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
+
+# Headless Chromium for the browser fallback (Rimi always, others when blocked). ~400 MB.
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/ms-playwright
+RUN python -m playwright install --with-deps chromium \
+ && rm -rf /var/lib/apt/lists/*
 
 COPY app /opt/leidiniai
 WORKDIR /opt/leidiniai

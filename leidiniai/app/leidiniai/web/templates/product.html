@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}{{ p.name or 'Produktas' }} – Leidiniai{% endblock %}
+{% block content %}
+<p><a href="{{ request.referrer if request.referrer and '/produktas/' not in request.referrer else url_for('offers.offers') }}">‹ Atgal</a></p>
+<div class="product">
+  <div class="pimg">{% set src = image_url(p.image) %}{% if src %}<img src="{{ src }}" alt="" referrerpolicy="no-referrer">{% endif %}</div>
+  <div>
+    <h1>{{ p.name or '(pavadinimas neatpažintas)' }}</h1>
+    <p><span class="chain c-{{ p.chain }}">{{ CHAIN_NAMES[p.chain] }}</span>
+      {% if p.quantity %} · {{ p.quantity }}{% endif %}
+      · {{ CATEGORIES.get(p.category, p.category) }}{% if p.category_source == 'user' %} <span class="muted">(nustatyta rankiniu būdu)</span>{% endif %}</p>
+    <p class="muted">Pasiūlymų: {{ stats.n }}{% if stats.min is not none %} · mažiausia kaina {{ stats.min|money }} · didžiausia {{ stats.max|money }}{% endif %}
+      · pirmą kartą {{ p.first_seen|day }}</p>
+    {% if p.name_key and not is_watched %}
+    <form method="post" action="{{ url_for('offers.watch_add') }}" class="inline">
+      <input type="hidden" name="term" value="{{ p.name }}"><input type="hidden" name="back" value="{{ request.path }}">
+      <button class="secondary">★ Stebėti</button>
+    </form>
+    {% elif is_watched %}<p class="ok">★ Stebima</p>{% endif %}
+    <details class="card" style="margin-top:.6rem">
+      <summary>Pakeisti kategoriją</summary>
+      <form method="post" action="{{ url_for('offers.product_category', pid=p.id) }}" class="filters" style="margin:.6rem 0 0">
+        <label>Kategorija <select name="category">{% for c, n in CATEGORIES.items() %}<option value="{{ c }}" {{ 'selected' if p.category == c }}>{{ n }}</option>{% endfor %}</select></label>
+        <label class="check"><input type="checkbox" name="learn" value="1"> įsiminti raktažodį</label>
+        <label>Raktažodis <input name="keyword" value="{{ key_hint }}" size="14"></label>
+        <button>Išsaugoti</button>
+      </form>
+      <p class="muted small">Raktažodis – žodžio pradžia be lietuviškų raidžių (pvz. „sviest“). Su juo bus perskaičiuotos visų produktų kategorijos, išskyrus pakeistas rankiniu būdu.</p>
+    </details>
+  </div>
+</div>
+
+<h2>Kainų istorija</h2>
+<table>
+  <tr><th>Galioja</th><th>Leidinys</th><th>Pavadinimas leidinyje</th><th class="num">Kaina</th><th class="num">Buvo</th><th>Nuolaida</th><th class="num">Vieneto kaina</th></tr>
+  {% for h in hist %}
+  <tr>
+    <td>{{ h.valid_from|day }} – {{ h.valid_to|day }}</td>
+    <td>{% if h.source_url %}<a href="{{ h.source_url }}" target="_blank" rel="noopener">{{ h.issue_title }}</a>{% else %}{{ h.issue_title }}{% endif %}{% if h.page %} <span class="muted">p. {{ h.page }}</span>{% endif %}</td>
+    <td>{{ h.name }}</td>
+    <td class="num">{{ h.price|money }}</td>
+    <td class="num">{{ h.old_price|money if h.old_price else '' }}</td>
+    <td>{{ h.discount_text or ('-' ~ h.discount_pct ~ '%' if h.discount_pct else '') }}{% if h.card %} <span class="badge card" title="{{ h.card_text or '' }}">kortelė</span>{% endif %}</td>
+    <td class="num">{{ (h.unit_price|money) ~ '/' ~ h.unit if h.unit_price else '' }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+{% if same %}
+<h2>Tas pats pavadinimas kituose tinkluose</h2>
+<table>
+  <tr><th>Tinklas</th><th>Pavadinimas</th><th class="num">Kaina dabar</th></tr>
+  {% for s in same %}<tr><td>{{ CHAIN_NAMES[s.chain] }}</td><td><a href="{{ url_for('offers.product', pid=s.id) }}">{{ s.name }}</a></td><td class="num">{{ s.now_price|money if s.now_price is not none else '–' }}</td></tr>{% endfor %}
+</table>
+{% endif %}
+{% endblock %}

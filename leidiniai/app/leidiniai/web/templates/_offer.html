@@ -1,0 +1,26 @@
+{# offer card, shared by Pasiūlymai and Stebimi #}
+{% macro offer_card(o, watched=false) %}
+<div class="offer{{ ' watched' if watched }}">
+  <a href="{{ url_for('offers.product', pid=o.product_id) }}" class="imgwrap">
+    {% set src = image_url(o.image) %}
+    {% if src %}<img src="{{ src }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}<div class="noimg">be nuotraukos</div>{% endif %}
+  </a>
+  <div class="meta"><span class="chain c-{{ o.chain }}">{{ CHAIN_NAMES[o.chain] }}</span>
+    {% if o.discount_text or o.discount_pct %}<span class="badge disc">{{ o.discount_text or ('-' ~ o.discount_pct ~ '%') }}</span>{% endif %}
+    {% if o.card %}<span class="badge card" title="{{ o.card_text or '' }}">kortelė</span>{% endif %}
+    {% if watched %}<span class="badge watch" title="Stebima">★</span>{% endif %}
+  </div>
+  <a class="name" href="{{ url_for('offers.product', pid=o.product_id) }}">{{ o.name or '(pavadinimas neatpažintas)' }}</a>
+  <div>
+    {% if o.price is not none %}<span class="price">{{ o.price|money }}</span>{% endif %}
+    {% if o.old_price %}<span class="old">{{ o.old_price|money }}</span>{% endif %}
+    {% set ex = extra_of(o) %}{% if ex.single_price %}<div class="small muted">{{ ex.single_text or 'Perkant 1 vnt.' }}: {{ ex.single_price|money }}</div>{% endif %}
+    {% if ex.benefit %}<div class="small muted">{{ ex.benefit }}</div>{% endif %}
+  </div>
+  <div class="small muted">
+    {% if o.unit_price %}{{ o.unit_price|money }}/{{ o.unit }}{% endif %}
+    {% if o.valid_to %} · iki {{ o.valid_to|day }}{% endif %}
+    {% if o.valid_from and o.valid_from > today_iso %} · nuo {{ o.valid_from|day }}{% endif %}
+  </div>
+</div>
+{% endmacro %}
