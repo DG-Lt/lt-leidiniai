@@ -2,7 +2,7 @@
 
 Collects the discount leaflets (akcijų leidiniai) of Lithuanian supermarket chains — **IKI, Rimi, Maxima, Norfa, Lidl, Šilas** — extracts every offer (name, price, old price, discount, unit price, validity, product picture), categorises it and keeps the history. Runs locally as a Home Assistant add-on; no cloud AI.
 
-Status: **in development** (app built in steps, see the pull requests). Design and per-chain findings: [docs/findings.md](docs/findings.md).
+Status: **in development** (app built in steps, see the pull requests). Install on Home Assistant: [docs/install.md](docs/install.md). Design and per-chain findings: [docs/findings.md](docs/findings.md).
 
 ## Repository layout
 | Path | What |
@@ -11,6 +11,7 @@ Status: **in development** (app built in steps, see the pull requests). Design a
 | `leidiniai/` | The Home Assistant app: `config.yaml`, `Dockerfile`, Python package in `app/leidiniai/` |
 | `tests/` | pytest tests (`pip install -r requirements-dev.txt`, then `pytest`); `LEIDINIAI_TESTDATA=<folder>` also runs the full-leaflet checks |
 | `tests/fixtures/` | Leaflet pages with the photos blanked, Maxima HTML, Rimi JSON (built by `tests/make_fixtures.py`, needs `pikepdf`) |
+| `docs/install.md` | Installing and updating the app on Home Assistant OS (deploy key, clone into `/addons`) |
 | `docs/findings.md` | How each chain publishes its leaflet, decisions, prototype results |
 | `prototype/` | First extraction test (Python) on the week 46/47 leaflets |
 
