@@ -7,12 +7,12 @@ Status: **in development** (app built in steps, see the pull requests). Install 
 ## Repository layout
 | Path | What |
 |---|---|
-| `repository.yaml` | Makes the clone a Home Assistant app repository (local apps) |
+| `repository.yaml` | Makes this a Home Assistant app repository (add the URL in the app store) |
 | `leidiniai/` | The Home Assistant app: `config.yaml`, `Dockerfile`, Python package in `app/leidiniai/` |
 | `tests/` | pytest tests (`pip install -r requirements-dev.txt`, then `pytest`); `LEIDINIAI_TESTDATA=<folder>` also runs the full-leaflet checks |
 | `tests/synthetic/` | Made-up Norfa-like PDF page and Maxima-like offers page for the pipeline/panel tests (built by `tests/make_synthetic.py`, needs `reportlab`) |
 | `tests/fixtures/` | **Not committed** (shop material): real leaflet pages with the photos blanked, Maxima HTML, Rimi JSON – build locally with `python tests/make_fixtures.py <folder with the test files>` (needs `pikepdf`); the parser accuracy tests run only when they are there |
-| `docs/install.md` | Installing and updating the app on Home Assistant OS (deploy key, clone into `/addons`) |
+| `docs/install.md` | Installing and updating the app on Home Assistant OS |
 | `docs/findings.md` | How each chain publishes its leaflet, decisions, prototype results |
 | `prototype/` | First extraction test (Python) on the week 46/47 leaflets |
 
