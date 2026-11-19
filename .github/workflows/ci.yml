@@ -29,9 +29,9 @@ jobs:
           for i in $(seq 1 30); do curl -fsS http://localhost:8099/ >/dev/null && break; sleep 2; done
           curl -fsS http://localhost:8099/ | grep -q "Pasiūlymai"
           # the parser libraries work inside the image (pdfplumber + pypdfium2 crops)
-          docker cp tests/fixtures/norfa_523_p4.pdf leidiniai-ci:/tmp/norfa.pdf
-          docker exec leidiniai-ci python -m leidiniai.parsers norfa /tmp/norfa.pdf | python3 -c "import json,sys; o=json.load(sys.stdin); assert len(o) == 13, len(o)"
-          docker exec leidiniai-ci python -c "from pathlib import Path; from leidiniai.parsers import pdf_text as p; o=p.parse('/tmp/norfa.pdf','norfa'); assert len(p.render_crops('/tmp/norfa.pdf',o,Path('/tmp/c')))==13"
+          docker cp tests/synthetic/norfa_synthetic.pdf leidiniai-ci:/tmp/norfa.pdf
+          docker exec leidiniai-ci python -m leidiniai.parsers norfa /tmp/norfa.pdf | python3 -c "import json,sys; o=json.load(sys.stdin); assert len(o) == 6, len(o)"
+          docker exec leidiniai-ci python -c "from pathlib import Path; from leidiniai.parsers import pdf_text as p; o=p.parse('/tmp/norfa.pdf','norfa'); assert len(p.render_crops('/tmp/norfa.pdf',o,Path('/tmp/c')))==6"
           sleep 3  # MQTT connects in the background
           # retained discovery + states on the broker
           docker exec mosquitto mosquitto_sub -t 'homeassistant/#' -t 'leidiniai/#' -v -W 5 --retained-only > /tmp/mqtt.txt || true

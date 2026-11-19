@@ -44,7 +44,7 @@ Maxima and Rimi provide their own categories. Others: Lithuanian keyword diction
 - **Šilas**: now Nr. 23 (2026-11-18 … 12-01), 12 pages; the page links one JPEG per page (`SLS23_01.jpg` …) and `SILAS_Nr23_2026.pdf`.
 
 ## Parsers in the app (step 3, 2026-11-19) — `leidiniai/app/leidiniai/parsers/`
-Checked page by page against the week 46/47 files; regression pages in `tests/fixtures/`.
+Checked page by page against the week 46/47 files; regression pages in `tests/fixtures/` (local only, not committed – shop material; built by `tests/make_fixtures.py`).
 - **Layout rule (IKI, Lidl, Norfa):** product text is always left of or above its own price. Text blocks go to
   the price with the lowest cost; prices wholly left of / above a block pay `(distance + 25) × penalty`
   (Lidl 3/3, Norfa 3/2, IKI left 3 / above 10). IKI prints the name above the photo and the price below it
