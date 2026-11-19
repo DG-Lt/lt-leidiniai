@@ -12,7 +12,34 @@ def settings():
 
 @bp.get("/busena")
 def status():
-    return render_template("status.html", options=settings().public())
+    from .. import logs
+    s = settings()
+    return render_template("status.html", options=s.public(), log_tail=logs.tail(s, 150),
+                           run_files=len(logs.run_summary_files(s)))
+
+
+@bp.get("/zurnalai.zip")
+def logs_zip():
+    """"Atsisiųsti žurnalus": log files + last run summaries + env.json, for debugging."""
+    from flask import Response
+    from .. import logs
+    data, name = logs.build_zip(settings())
+    return Response(data, mimetype="application/zip",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
+
+
+@bp.get("/tikrinimas/<int:run_id>")
+def run_detail(run_id):
+    import json
+    from flask import abort
+    from .. import db
+    with db.session(settings()) as conn:
+        r = conn.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+    if not r:
+        abort(404)
+    summary = json.loads(r["summary"] or "{}")
+    return render_template("run.html", run=r, summary=summary,
+                           pretty=json.dumps(summary, ensure_ascii=False, indent=2))
 
 
 STATUS_LT = {"new": "naujas", "downloaded": "atsisiųstas", "parsed": "apdorotas", "parse_failed": "skaitymo klaida",

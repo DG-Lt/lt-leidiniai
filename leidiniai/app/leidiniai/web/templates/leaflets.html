@@ -36,8 +36,9 @@
 <table>
   <tr><th>Pradžia</th><th>Tinklas</th><th>Priežastis</th><th>Rezultatas</th></tr>
   {% for r in runs %}
-  <tr><td>{{ r.started|dt }}</td><td>{{ CHAIN_NAMES[r.chain] }}</td><td>{{ r.trigger }}</td>
+  <tr><td><a href="{{ url_for('ui.run_detail', run_id=r.id) }}">{{ r.started|dt }}</a></td><td>{{ CHAIN_NAMES[r.chain] }}</td><td>{{ r.trigger }}</td>
       <td class="{{ 'ok' if r.status == 'ok' else 'err' if r.status == 'error' else 'warn' }}">{{ r.status }}</td></tr>
   {% else %}<tr><td colspan="4" class="muted">Dar nėra.</td></tr>{% endfor %}
 </table>
+<p><a class="btn secondary" href="{{ url_for('ui.logs_zip') }}" download>Atsisiųsti žurnalus</a></p>
 {% endblock %}

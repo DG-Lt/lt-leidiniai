@@ -15,7 +15,7 @@ from datetime import date
 
 from . import config, db, fetchers, pipeline
 from .http import Http
-from .logs import setup_logging
+from .logs import setup_logging, write_run_summary
 
 log = logging.getLogger("leidiniai.job")
 
@@ -139,6 +139,10 @@ def run(chain: str, trigger: str, settings) -> dict:
                      (chain, fin, fin if status != "error" else None,
                       "; ".join(summary["errors"])[:500] or None, run_id))
     conn.close()
+    try:
+        write_run_summary(settings, summary)
+    except Exception as e:
+        log.warning("could not write the run summary file: %s", e)
     log.info("%s: run %d finished – %s (%s s, %d request(s), %d browser page(s))", chain, run_id, status,
              summary["timings"]["total_s"], summary["http"]["requests"], summary["http"]["browser_pages"])
     return summary

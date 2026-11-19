@@ -8,4 +8,18 @@
   {% for k, v in options.items() %}<tr><th>{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}
 </table>
 </div>
+
+<h2>Žurnalai</h2>
+<p>
+  <a class="btn" href="{{ url_for('ui.logs_zip') }}" download>Atsisiųsti žurnalus</a>
+  <span class="muted small">ZIP: žurnalo failai, paskutinių 20 tikrinimų santraukos ir aplinkos aprašas (be slaptažodžių).
+  Išsaugota santraukų: {{ run_files }}.</span>
+</p>
+{% if log_tail %}
+<details>
+  <summary>Paskutinės {{ log_tail|length }} žurnalo eilutės</summary>
+  <pre class="log">{% for l in log_tail %}<span class="{{ 'err' if ' ERROR ' in l else 'warn' if ' WARNING ' in l }}">{{ l }}</span>
+{% endfor %}</pre>
+</details>
+{% else %}<p class="muted">Žurnalas dar tuščias.</p>{% endif %}
 {% endblock %}

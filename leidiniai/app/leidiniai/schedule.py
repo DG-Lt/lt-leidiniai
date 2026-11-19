@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import queue
+import re
 import shutil
 import subprocess
 import sys
@@ -58,6 +59,18 @@ def due(conn, chain: str, today: date) -> tuple[bool, str, date]:
         return True, ("leaflet ends soon" if ends and today >= min(ends) - timedelta(days=window)
                       else f"not checked for {MAX_GAP_DAYS} days"), today
     return False, "", nxt
+
+
+_CHILD_LINE = re.compile(r"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d (DEBUG|INFO|WARNING|ERROR|CRITICAL)\s+(\S+): (.*)$")
+
+
+def relay(jl: logging.Logger, line: str) -> None:
+    """Log a line of the job process with its own level; the child's timestamp/name prefix is dropped."""
+    m = _CHILD_LINE.match(line)
+    if m:
+        jl.log(getattr(logging, m.group(1)), "%s", m.group(3))
+    else:  # tracebacks, library prints
+        jl.info("%s", line)
 
 
 def child_env(settings) -> dict:
@@ -157,7 +170,7 @@ class Runner:
                 if line.startswith("SUMMARY "):
                     run_id = json.loads(line[8:]).get("run_id")
                 elif line:
-                    jl.info("%s", line.split(": ", 1)[-1] if " leidiniai" in line[:40] else line)
+                    relay(jl, line)
             rc = p.wait()
             log.info("%s check finished (exit %s) in %.0f s", chain, rc, time.monotonic() - t0)
         except Exception:
