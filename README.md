@@ -2,6 +2,8 @@
 
 Collects the discount leaflets (akcijų leidiniai) of Lithuanian supermarket chains — **IKI, Rimi, Maxima, Norfa, Lidl, Šilas** — extracts every offer (name, price, old price, discount, unit price, validity, product picture), categorises it and keeps the history. Runs locally as a Home Assistant add-on; no cloud AI.
 
+A personal project, not affiliated with or endorsed by any of these chains; the names only say whose public leaflets it reads. Leaflets are downloaded only to your own Home Assistant box, for personal use – none are stored in this repository.
+
 Status: **in development** (app built in steps, see the pull requests). Install on Home Assistant: [docs/install.md](docs/install.md). Design and per-chain findings: [docs/findings.md](docs/findings.md).
 
 ## Repository layout
