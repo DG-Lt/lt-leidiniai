@@ -208,3 +208,38 @@ def test_rimi_catalogue_without_product_links_waits_for_picture_reader(tmp_path)
         d = tmp_path / str(len(captured))
         files = rimi.Rimi(h, logging.getLogger("t"), REF).download(info, d)
         assert info.parser == "vision" and [f["name"] for f in files] == ["enrichments.json"]
+
+
+NORFA_PROMO = """<div class="c-discount-item"><img src="/assets/Uploads/Offers/Eserys.jpg">
+<div class="c-discount-item__details"><a href="/akciju-puslapiai/akcijos/jurinis-eserys/" class="c-discount-item__title">Jūrinio ešerio pasiūlymas 11 18-11 22 d.</a>
+<div class="c-discount-item__description">Didžiausiose parduotuvėse NORFA H, XXL, XL 2026 m. 11 18-11 22 d. &nbsp;žuvies ant ledo skyriuose Atšildytas didysis jūrinis ešerys (skrostas), 1 kg - tik 6,49 Eur.</div></div></div>
+<div class="c-discount-item"><div class="c-discount-item__details"><a href="/akciju-puslapiai/akcijos/rivona/" class="c-discount-item__title">SAVAITGALIO 11,20-11,22 d. NUOLAIDA - RIVONA gaminiams</a>
+<div class="c-discount-item__description">Savaitgalio 11 20-11 22 d. nuolaida perkantiems su NORFA nuolaidų kortele: - 30% RIVONA gamintojo virtiems, rūkytiems ir vytintiems mėsos gaminiams*. *Nuolaida taikoma kasoje</div></div></div>"""
+NORFA_NEWS = """<div class="c-discount-item"><div class="c-discount-item__details"><a href="/akciju-puslapiai/akcijos/gritte/" class="c-discount-item__title">GRITTE žaidimas</a>
+<div class="c-discount-item__description">ŽAIDIMAS su GRITE prekėmis! Pirkdami už 4,99 Eur ir daugiau – registruokite kvitą</div></div></div>"""
+
+
+def test_norfa_promotions_page(tmp_path):
+    import logging
+    from leidiniai.fetchers import norfa
+    from leidiniai.parsers import parse_issue
+    N = norfa.Norfa
+    h = FakeHttp({N.listing_url: '<div>NORFA Nr. 23 (523)</div><div>2026.11.12 - 2026.11.25</div>',
+                  N.PROMOS_URL.format(n=0): NORFA_PROMO, N.PROMOS_URL.format(n=4): NORFA_NEWS,
+                  N.PROMOS_URL.format(n=8): "<p>nothing</p>"})
+    out = N(h, logging.getLogger("t"), REF).discover()
+    assert [i.series for i in out] == ["leidinys", "akcijos"]
+    p = out[1]
+    assert p.meta["offers"] == 2 and p.meta["snapshot"] and p.valid_to == date(2026, 11, 22)
+    assert p.meta["min_to"] == "2026-11-22" and len(p.prefetched) == 2
+    files = []
+    for name, data in p.prefetched.items():
+        (tmp_path / name).write_bytes(data)
+        files.append({"name": name, "path": str(tmp_path / name)})
+    offers = parse_issue("norfa", p.parser, files, p.meta, REF, logging.getLogger("t"))
+    e, r = offers
+    assert (e.name, e.price, e.valid_from, e.valid_to, e.card) == \
+        ("Atšildytas didysis jūrinis ešerys (skrostas), 1 kg", 649, date(2026, 11, 18), date(2026, 11, 22), False)
+    assert e.image_url == "https://www.norfa.lt/assets/Uploads/Offers/Eserys.jpg"
+    assert (r.kind, r.discount_pct, r.card, r.name) == \
+        ("badge", 30, True, "RIVONA gamintojo virtiems, rūkytiems ir vytintiems mėsos gaminiams")

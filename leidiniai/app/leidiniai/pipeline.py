@@ -35,9 +35,9 @@ def parse_stored(conn, settings, issue_id: int, parser: str | None, summary: dic
     """Parse an issue from its stored files. Returns True when offers were saved."""
     issue = conn.execute("SELECT * FROM issues WHERE id=?", (issue_id,)).fetchone()
     chain = issue["chain"]
-    parser = parser or parser_of(chain)
     files = json.loads(issue["files"] or "[]")
     meta = json.loads(issue["meta"] or "{}")
+    parser = parser or meta.get("parser") or parser_of(chain)
     ref = date.fromisoformat(issue["valid_from"]) if issue["valid_from"] else date.today()
     t0 = time.monotonic()
     with conn:
@@ -61,7 +61,10 @@ def parse_stored(conn, settings, issue_id: int, parser: str | None, summary: dic
         log.info("%s %s: %d offer(s) (%d named, %d priced, %d image(s)) in %.0f s; flags %s",
                  chain, issue["key"], counts["offers"], counts["named"], counts["priced"], len(images),
                  entry["seconds"], counts["flags"] or "–")
-        if not offers:
+        if not offers and parser == "pdf" and not _has_prices(files):
+            # award / assortment catalogues without a single price (Lithuania bans alcohol advertising): not a fault
+            log.info("%s %s: no prices printed in this leaflet (catalogue) – nothing to list", chain, issue["key"])
+        elif not offers:
             summary["warnings"].append(f"{issue['key']}: no offers found (layout changed?)")
             log.warning("%s %s: the parser found no offers", chain, issue["key"])
         elif counts["named"] < 0.8 * counts["offers"]:
@@ -135,3 +138,22 @@ def housekeep(conn, settings, log, today: date | None = None) -> dict:
     if out["pdf_dirs"] or out["img_dirs"]:
         log.info("clean-up: removed %d leaflet folder(s), %d crop folder(s)", out["pdf_dirs"], out["img_dirs"])
     return out
+
+
+def _has_prices(files: list[dict]) -> bool:
+    """Does any stored PDF mention prices (€, Eur, kaina)? The text layer only. The two wine award catalogues of
+    2026-11 (IKI, Rimi) have none – names and tasting notes only."""
+    import re
+    import pdfplumber
+    rx = re.compile(r"€|\bEur\b|\bEUR\b|\bkaina\b", re.I)  # a leaflet with prices says so somewhere
+    for f in files:
+        if not f.get("name", "").lower().endswith(".pdf"):
+            continue
+        try:
+            with pdfplumber.open(f["path"]) as pdf:
+                for page in pdf.pages:
+                    if rx.search(page.extract_text() or ""):
+                        return True
+        except Exception:
+            return True  # can't tell: keep the warning
+    return False

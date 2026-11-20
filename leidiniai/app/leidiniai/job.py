@@ -107,11 +107,18 @@ def run(chain: str, trigger: str, settings) -> dict:
                 with conn:
                     conn.execute("UPDATE issues SET status='failed', error=?, attempts=attempts+1 WHERE id=?", (str(e)[:500], iid))
         pipeline.retry_parses(conn, settings, chain, summary, log)
-        # newer issue of the same series replaces older snapshots (Maxima)
-        if chain == "maxima" and infos:
-            with conn:
-                conn.execute("UPDATE issues SET status='superseded' WHERE chain='maxima' AND key<>? AND status NOT IN ('superseded','expired')",
-                             (infos[0].key,))
+        if summary.get("parsed"):  # new shop-categorised products teach the others: sort the unlocked ones again
+            from .store import recategorise
+            t = time.monotonic()
+            moved = recategorise(conn)
+            summary["timings"]["recategorise_s"] = round(time.monotonic() - t, 1)
+            log.info("%s: categories re-sorted, %d product(s) moved", chain, moved)
+        # snapshots of a live offers page (Maxima, Norfa promotions): the newest replaces the older ones
+        for info in infos:
+            if info.chain == "maxima" or info.meta.get("snapshot"):
+                with conn:
+                    conn.execute("UPDATE issues SET status='superseded' WHERE chain=? AND series=? AND key<>?"
+                                 " AND status NOT IN ('superseded','expired')", (info.chain, info.series, info.key))
     except Exception as e:
         status = "error"
         summary["errors"].append(str(e))

@@ -116,7 +116,7 @@ _KW = {
     "pets": """sun sunims sunu kac kacu katems kat kraikas edal pasar gyvun""",
     "household": """skalb plovikl indu valikl valymo tualet popier ranksluost servetel siuksl maisai
         maisu kempin oro gaiviklis minkstikl balikl""",
-    "hygiene": """burnos lupu kauke samp dantu pasta dezodor muil dusas dusu kosmet krem veido plauk losjon skust higien
+    "hygiene": """burnos lupu kauke samp dantu pasta dezodor muil dusas dusu kosmet veido plauk losjon skust higien
         paketai tamponai vatos""",
     "home": """sluota matavimo pele siurbl pustuv kabel lygintuv virdul sildytuv lemput kilimel kuprin apatin pirstin flomaster akumuliator elektrin rankin lekst puodel puod keptuv peilis rankšl antklod pagalv patalyn slepet kojin rubai marskin
         lempa baterij langu skystis irankiai irank zvak dekor kaledin eglut""",
@@ -132,6 +132,11 @@ SEED_KEYWORDS.update({
     "pieno misin": "baby", "sokoladinis pienas": "dairy", "zieminis langu": "home",
     "ledu kava": "coffee_tea", "saldytos uogos": "frozen", "saldytos darzoves": "frozen",
     "langu skystis": "home", "alaus kokt": "drinks", "nealk alaus": "drinks",
+    # "kremas" alone is food as often as cosmetics (varškės kremas, šokoladinis kremas): only these are cosmetics
+    "veido krem": "hygiene", "ranku krem": "hygiene", "kuno krem": "hygiene", "akiu krem": "hygiene",
+    "pedu krem": "hygiene", "dienos krem": "hygiene", "nakties krem": "hygiene", "saules krem": "hygiene",
+    "apsauginis krem": "hygiene", "kremas rank": "hygiene", "kremas veid": "hygiene", "kremas kun": "hygiene",
+    "kremas ped": "hygiene", "skalbimo kaps": "household", "indaplov": "household",
 })
 
 
@@ -155,12 +160,102 @@ def _shop_map(conn) -> dict[tuple[str, str], tuple[str, str]]:
     return m
 
 
+# ------------------------------------------------------------------ learning from similar names
+# Maxima and Rimi put every offer in a category of their own, and the user corrects some by hand. Those products
+# are "examples"; a new name gets the category most of its most similar examples have. Similar = sharing
+# informative word stems (rare stems count more), so "Varškės kremas su vanile" lands next to Maxima's dairy
+# desserts, not next to hand cream. Nothing about products is written here: it all comes from the database.
+STOP = set("""su ir be ar is i per po nuo iki uz ant del prie kaip tik su g kg ml l cl vnt pak but ind dez rit lap
+    rusiu rus rusies vnt proc rieb s m a r x pvz kompl dydziu spalvu ivairiu ivairus ivairios skoniu kvapu
+    fasuot fasuotas fasuoti fasuota sveriamas sveriama sveriami vakuumuota supakuota pakuoteje pakuote
+    naujiena akcija premium mini maxi didele didelis mazas""".split())
+STEM = 5          # Lithuanian endings change, the start of the word stays: "kiaulien|a/os/ai"
+MIN_SCORE = 0.35  # weighted Dice overlap of the stems of the name and of an example (0..1)
+MIN_SUPPORT = 0.9  # summed similarity of the winning category (about two good neighbours)
+
+
+def stems(name_or_key: str) -> list[str]:
+    out = []
+    for w in fold(name_or_key).split():
+        if len(w) < 3 or w in STOP or not w[0].isalpha() or any(c.isdigit() for c in w):
+            continue
+        s = w[:STEM]
+        if s not in out:
+            out.append(s)
+    return out
+
+
+class Similar:
+    """Inverted index over example products: stem → [(example, weight)]."""
+
+    def __init__(self, examples: list[tuple[str, str, float]]):  # (name, category, weight)
+        import math
+        self.ex = []
+        self.index: dict[str, list[int]] = {}
+        for name, cat, w in examples:
+            st = stems(name)
+            if not st or cat not in CATEGORIES or cat == "other":
+                continue
+            i = len(self.ex)
+            self.ex.append((set(st), cat, w))  # weights summed below once idf is known
+            for s in st:
+                self.index.setdefault(s, []).append(i)
+        n = max(1, len(self.ex))
+        self.idf = {s: math.log(1 + n / len(ids)) for s, ids in self.index.items()}
+        self.mass = [sum(self.idf[s] for s in st) for st, _, _ in self.ex]
+
+    def __len__(self):
+        return len(self.ex)
+
+    def guess(self, name: str, k: int = 7) -> tuple[str, float] | None:
+        """→ (category, confidence 0..1) or None when the examples don't agree or nothing is similar enough."""
+        st = [s for s in stems(name) if s in self.idf]
+        if not st:
+            return None
+        # unknown stems still count in the name's mass (as rare words): "Mangas" vs "Mango jogurtas" stays apart
+        rare = max(self.idf.values())
+        total = sum(self.idf.get(s, rare) for s in stems(name))
+        scores: dict[int, float] = {}
+        shared: dict[int, int] = {}
+        for s in st:
+            for i in self.index[s]:
+                scores[i] = scores.get(i, 0.0) + self.idf[s]
+                shared[i] = shared.get(i, 0) + 1
+        # one word in common is not enough ("Mangas" ≠ "Mango jogurtas"): single words are the keyword list's job
+        best = sorted(((2 * v / (total + self.mass[i]), i) for i, v in scores.items() if shared[i] >= 2),
+                      reverse=True)[:k]
+        votes: dict[str, float] = {}
+        for sim, i in best:
+            if sim >= MIN_SCORE:
+                votes[self.ex[i][1]] = votes.get(self.ex[i][1], 0.0) + sim * self.ex[i][2]
+        if not votes:
+            return None
+        cat, v = max(votes.items(), key=lambda x: x[1])
+        share = v / sum(votes.values())
+        if v < MIN_SUPPORT or share < 0.6:
+            return None
+        return cat, round(share, 2)
+
+
+def _examples(conn) -> list[tuple[str, str, float]]:
+    """Products whose category a person or the shop decided: user corrections weigh 3, shop categories 1."""
+    if conn is None:
+        return []
+    try:
+        rows = conn.execute("SELECT name, category, category_source FROM products"
+                            " WHERE category_source IN ('user','shop') AND category<>'other'").fetchall()
+    except Exception:
+        return []
+    return [(r[0], r[1], 3.0 if r[2] == "user" else 1.0) for r in rows]
+
+
 class Classifier:
     """Load the dictionaries once per parse run."""
 
     def __init__(self, conn=None):
         self.kw = _keywords(conn)
         self.map = _shop_map(conn)
+        self.similar = Similar(_examples(conn))
 
     def shop(self, chain: str, ext: str | None) -> tuple[str, str] | None:
         if not ext:
@@ -174,29 +269,60 @@ class Classifier:
                 return self.map[(chain, k)]
         return None
 
-    def _match(self, words: list[str]) -> str | None:
-        best = None  # (user keyword, position of the last matched word, length, category)
+    def _match(self, words: list[str], describing: set[int] | None = None, only_user: bool = False) -> str | None:
+        """describing: positions of words that only describe the product (genitive plural "česnakų") –
+        a keyword found there loses to one found in a naming word."""
+        describing = describing or set()
+        best = None  # (user keyword, naming word, position of the last matched word, length, category)
         for k, (cat, user) in self.kw.items():
+            if only_user and not user:
+                continue
             kws = k.split()
             n = len(kws)
             for j in range(len(words) - n, -1, -1):
                 if all(words[j + t].startswith(kws[t]) if t == n - 1 else words[j + t] == kws[t] for t in range(n)):
-                    cand = (user, j + n - 1, len(k), cat)
-                    if best is None or cand[:3] > best[:3]:
+                    cand = (user, (j + n - 1) not in describing, j + n - 1, len(k), cat)
+                    if best is None or cand[:4] > best[:4]:
                         best = cand
                     break
-        return best[3] if best else None
+        return best[4] if best else None
 
     def keyword(self, name: str) -> str | None:
         """Printed name (or a plain key) → category from the dictionary, or None."""
         head = re.split(r"\s(?:su|ar|be|įdaryt\w*|pagardint\w*)\s|\s\d", name, maxsplit=1)[0]
-        return self._match(fold(head).split()) or self._match(fold(name).split())
+        return self._match(*self._words(head)) or self._match(*self._words(name))
+
+    def user_keyword(self, name: str) -> str | None:
+        """Only the keywords the user taught ("Įsiminti raktažodį")."""
+        return self._match(*self._words(name), only_user=True)
+
+    @staticmethod
+    def _words(text: str) -> tuple[list[str], set[int]]:
+        """Folded words + positions of genitive-plural words (printed ending -ų/-ių): those describe."""
+        words, desc = [], set()
+        for raw in re.split(r"[^\w%+]+", text or ""):
+            f = fold(raw)
+            if not f:
+                continue
+            for part in f.split():
+                if raw.lower().endswith("ų") and len(raw) > 3:
+                    desc.add(len(words))
+                words.append(part)
+        return words, desc
 
     def classify(self, chain: str, name: str, ext_category: str | None) -> tuple[str, str]:
-        """→ (category, source) where source is shop|keyword|shop_weak|none."""
+        """→ (category, source) where source is shop|keyword|similar|shop_weak|none.
+        Order: the shop's own category → a keyword the user taught → what similar products (shop- or
+        user-categorised) are → the built-in keyword list → the shop's vague category → other."""
         sm = self.shop(chain, ext_category)
         if sm and sm[1] == "strong":
             return sm[0], "shop"
+        k = self.user_keyword(name)
+        if k:
+            return k, "keyword"
+        g = self.similar.guess(name)
+        if g:
+            return g[0], "similar"
         k = self.keyword(name)
         if k:
             return k, "keyword"
