@@ -20,8 +20,24 @@ from .logs import setup_logging, write_run_summary
 log = logging.getLogger("leidiniai.job")
 
 
+LEARNT_META = ("parser",)  # learnt while downloading (Rimi catalogue → catalogue_pdf): the listing does not know it
+
+
+def merge_meta(stored: str | None, listed: dict) -> dict:
+    """The listing's meta replaces the stored one, except keys the download learnt."""
+    try:
+        old = json.loads(stored or "{}")
+    except ValueError:
+        old = {}
+    out = dict(listed)
+    for k in LEARNT_META:
+        if k in old and k not in out:
+            out[k] = old[k]
+    return out
+
+
 def upsert(conn, info, now) -> tuple[int, bool]:
-    r = conn.execute("SELECT id, status FROM issues WHERE chain=? AND key=?", (info.chain, info.key)).fetchone()
+    r = conn.execute("SELECT id, status, meta FROM issues WHERE chain=? AND key=?", (info.chain, info.key)).fetchone()
     vf = info.valid_from.isoformat() if info.valid_from else None
     vt = info.valid_to.isoformat() if info.valid_to else None
     with conn:
@@ -32,7 +48,7 @@ def upsert(conn, info, now) -> tuple[int, bool]:
                 conn.execute("UPDATE issues SET last_seen=?, title=?, series=?, number=COALESCE(?,number),"
                              " valid_from=COALESCE(?,valid_from), valid_to=COALESCE(?,valid_to), meta=? WHERE id=?",
                              (now, info.title, info.series, info.number, vf, vt,
-                              json.dumps(info.meta, ensure_ascii=False), r["id"]))
+                              json.dumps(merge_meta(r["meta"], info.meta), ensure_ascii=False), r["id"]))
                 if vf or vt:  # dates learnt later (IKI 0.4.0 → 0.4.1): offers without own dates follow the leaflet
                     conn.execute("UPDATE offers SET valid_from=COALESCE(valid_from, ?), valid_to=COALESCE(valid_to, ?)"
                                  " WHERE issue_id=?", (vf, vt, r["id"]))
