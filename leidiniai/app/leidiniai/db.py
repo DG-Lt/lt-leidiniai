@@ -125,6 +125,12 @@ MIGRATIONS: list[str] = [
     );
     ALTER TABLE issues ADD COLUMN parse_attempts INTEGER NOT NULL DEFAULT 0;
     """,
+    # 3 (0.4.1): IKI footer PDFs (policies, complaint rules) were taken for leaflets by 0.4.0 – drop them
+    """
+    DELETE FROM issues WHERE chain='iki' AND COALESCE(offers,0)=0
+        AND (lower(key) LIKE '%privatumo%' OR lower(key) LIKE '%tvarka%' OR lower(key) LIKE '%taisykl%'
+             OR lower(key) LIKE '%politika%' OR lower(key) LIKE '%salygos%');
+    """,
 ]
 
 

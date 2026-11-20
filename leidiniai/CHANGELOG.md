@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1
+- IKI: only leaflets are collected – the policy PDFs linked in the iki.lt footer were taken for leaflets and are
+  removed from the database on update. The leaflet title and dates now come from the page
+  ("IKI Kainų leidinys Nr. 47", 2026-11-16 – 11-22) instead of the button text; the leaflet already stored gets
+  them at its next check.
+- IKI: the other leaflets under "Kiti IKI leidiniai" (store offers, catalogues) are collected too.
+- Dates written as "2026 11 16" are understood.
+
 ## 0.4.0
 - Home Assistant entities over MQTT discovery (needs the Mosquitto broker app; credentials come from the
   Supervisor): a leaflet sensor per chain, **Naujas leidinys** event, **Stebimi akcijose** (watched offers valid
