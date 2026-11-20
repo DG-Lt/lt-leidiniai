@@ -35,7 +35,7 @@ def test_new_issue_makes_chain_due(settings):
     _issue(conn, "alko", "new", {}, future)
     with conn:
         conn.execute("INSERT INTO chain_state(chain,last_check) VALUES('rimi',?)", (db.now_iso(),))
-    assert schedule.due(conn, "rimi", date.today())[:2] == (True, "a leaflet waits to be downloaded")
+    assert schedule.due(conn, "rimi", date.today())[:2] == (True, "a leaflet waits to be downloaded or read")
 
 
 def test_listing_keeps_learnt_parser():

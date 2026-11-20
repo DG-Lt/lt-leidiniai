@@ -144,6 +144,9 @@ MIGRATIONS: list[str] = [
     UPDATE issues SET status='new', attempts=0, parse_attempts=0, error=NULL
     WHERE chain='rimi' AND status='waiting_parser' AND json_extract(meta, '$.parser') IS NULL
         AND (valid_to IS NULL OR valid_to >= date('now'));
+    -- IKI leaflets still valid: parse the stored PDFs again with the name clean-up
+    UPDATE issues SET status='downloaded', parse_attempts=0
+    WHERE chain='iki' AND status='parsed' AND files LIKE '%.pdf%' AND (valid_to IS NULL OR valid_to >= date('now'));
     """,
 ]
 

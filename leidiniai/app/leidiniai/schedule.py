@@ -3,7 +3,7 @@
 Rule (docs/findings.md): a chain is checked at the nightly check time when
 - it has no leaflet yet, or
 - the newest leaflet of a series still on the listing ends within WINDOW days (Maxima: 1 day), or
-- it was not checked for 7 days (undated catalogues), the last check failed, or a leaflet waits to be downloaded.
+- it was not checked for 7 days (undated catalogues), the last check failed, or a leaflet waits to be downloaded or read.
 After a check that finds nothing new the rule stays true, so it is checked again the next night.
 """
 from __future__ import annotations
@@ -38,8 +38,8 @@ def due(conn, chain: str, today: date) -> tuple[bool, str, date]:
     last = datetime.fromisoformat(st["last_check"]).date()
     if st["last_error"]:
         return True, "last check failed", today
-    if any(i["status"] == "new" and (not i["valid_to"] or i["valid_to"] >= today.isoformat()) for i in issues):
-        return True, "a leaflet waits to be downloaded", today
+    if any(i["status"] in ("new", "downloaded") and (not i["valid_to"] or i["valid_to"] >= today.isoformat()) for i in issues):
+        return True, "a leaflet waits to be downloaded or read", today
     listed_at = max(i["last_seen"] for i in issues)[:10]
     ends = []
     for series in {i["series"] for i in issues}:
