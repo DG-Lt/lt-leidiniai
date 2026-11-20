@@ -20,10 +20,14 @@ MAX_PARSE_ATTEMPTS = 3
 
 def after_download(conn, settings, issue_id, info, summary, log) -> None:
     if info.parser == "vision":
-        with conn:
-            conn.execute("UPDATE issues SET status='waiting_parser' WHERE id=?", (issue_id,))
-        log.info("%s %s: image-only leaflet, waits for the vision parser (later step)", info.chain, info.key)
-        return
+        from . import vision
+        if not vision.ready(settings):
+            with conn:
+                conn.execute("UPDATE issues SET status='waiting_parser' WHERE id=?", (issue_id,))
+            log.info("%s %s: image-only leaflet, waits for the picture reader (option picture_reader: %s, %s)",
+                     info.chain, info.key, settings.picture_reader,
+                     vision.read_status(settings).get("message") or "not ready")
+            return
     parse_stored(conn, settings, issue_id, info.parser, summary, log)
 
 
@@ -46,9 +50,26 @@ def parse_stored(conn, settings, issue_id: int, parser: str | None, summary: dic
         missing = [f["name"] for f in files if not Path(f["path"]).exists()]
         if missing:
             raise FileNotFoundError(f"stored file(s) missing: {', '.join(missing)}")
-        offers = parse_issue(chain, parser, files, meta, ref, log)
-        t_parse = time.monotonic() - t0
         images = {}
+        if parser == "vision":
+            from . import vision
+            if not vision.ready(settings):
+                with conn:
+                    conn.execute("UPDATE issues SET status='waiting_parser', parse_attempts=parse_attempts-1"
+                                 " WHERE id=?", (issue_id,))
+                log.info("%s %s: image-only leaflet, the picture reader is not ready", chain, issue["key"])
+                return False
+            try:
+                offers, images = vision.parse_issue(settings, issue, files, log)
+            except vision.NoPictures as e:
+                with conn:
+                    conn.execute("UPDATE issues SET status='waiting_parser', parse_attempts=parse_attempts-1"
+                                 " WHERE id=?", (issue_id,))
+                log.info("%s %s: %s – still waiting", chain, issue["key"], e)
+                return False
+        else:
+            offers = parse_issue(chain, parser, files, meta, ref, log)
+        t_parse = time.monotonic() - t0
         if parser in ("pdf", "catalogue_pdf"):
             images = render_issue_crops(settings, issue, files, offers, log)
         counts = store.save_offers(conn, issue, offers, images)
@@ -105,9 +126,12 @@ def render_issue_crops(settings, issue, files, offers, log) -> dict[int, str]:
 
 
 def retry_parses(conn, settings, chain: str, summary: dict, log) -> None:
-    """Issues downloaded but not parsed (crash, parser bug fixed by an update): parse from the stored files."""
-    rows = conn.execute("SELECT id, key, valid_to FROM issues WHERE chain=? AND status IN ('downloaded','parse_failed')"
-                        " AND parse_attempts < ?", (chain, MAX_PARSE_ATTEMPTS)).fetchall()
+    """Issues downloaded but not parsed (crash, parser bug fixed by an update, picture reader now ready):
+    parse from the stored files."""
+    from . import vision
+    states = ("downloaded", "parse_failed", "waiting_parser") if vision.ready(settings) else ("downloaded", "parse_failed")
+    rows = conn.execute(f"SELECT id, key, valid_to FROM issues WHERE chain=? AND status IN ({','.join('?' * len(states))})"
+                        " AND parse_attempts < ?", (chain, *states, MAX_PARSE_ATTEMPTS)).fetchall()
     for r in rows:
         if r["valid_to"] and r["valid_to"] < date.today().isoformat():
             continue

@@ -20,7 +20,7 @@ import threading
 import time
 from datetime import date, datetime, timedelta
 
-from . import db
+from . import db, vision
 
 log = logging.getLogger("leidiniai.schedule")
 WINDOW = {"maxima": 1}
@@ -29,8 +29,9 @@ MAX_GAP_DAYS = 7
 NIGHT_HOURS = 4  # a missed check time is made up only within this many hours
 
 
-def due(conn, chain: str, today: date) -> tuple[bool, str, date]:
-    """(due now?, reason, date of the next due night)."""
+def due(conn, chain: str, today: date, reader_ready: bool = False) -> tuple[bool, str, date]:
+    """(due now?, reason, date of the next due night). `reader_ready`: the picture reader can read
+    image-only leaflets now."""
     st = conn.execute("SELECT * FROM chain_state WHERE chain=?", (chain,)).fetchone()
     issues = conn.execute("SELECT * FROM issues WHERE chain=? AND status NOT IN ('superseded')", (chain,)).fetchall()
     if not issues or not st or not st["last_check"]:
@@ -40,6 +41,9 @@ def due(conn, chain: str, today: date) -> tuple[bool, str, date]:
         return True, "last check failed", today
     if any(i["status"] == "new" and (not i["valid_to"] or i["valid_to"] >= today.isoformat()) for i in issues):
         return True, "a leaflet waits to be downloaded", today
+    if reader_ready and any(i["status"] == "waiting_parser" and i["parse_attempts"] < 3
+                            and (not i["valid_to"] or i["valid_to"] >= today.isoformat()) for i in issues):
+        return True, "an image-only leaflet waits for the picture reader", today
     listed_at = max(i["last_seen"] for i in issues)[:10]
     ends = []
     for series in {i["series"] for i in issues}:
@@ -110,7 +114,7 @@ class Runner:
         out = {}
         with db.session(self.settings) as conn:
             for c in self.settings.chains:
-                is_due, _, d = due(conn, c, date.today())
+                is_due, _, d = due(conn, c, date.today(), vision.ready(self.settings))
                 if is_due:
                     d = date.today()
                     if datetime.now() >= datetime.combine(d, datetime.min.time()).replace(hour=hh, minute=mm):
@@ -134,7 +138,7 @@ class Runner:
             db.kv_set(conn, "last_nightly", slot.isoformat())
             todo = []
             for c in self.settings.chains:
-                is_due, reason, _ = due(conn, c, now.date())
+                is_due, reason, _ = due(conn, c, now.date(), vision.ready(self.settings))
                 if is_due:
                     todo.append(c)
                     log.info("Night check: %s due (%s)", c, reason)

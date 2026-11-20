@@ -55,6 +55,26 @@ actions:
         {{ trigger.to_state.attributes.valid_to }}), pasiūlymų: {{ trigger.to_state.attributes.offers }}
 ```
 
+## Picture reader (image-only leaflets)
+Šilas (and some Rimi catalogues) publish their leaflets as pictures only, with no text inside. They show
+**laukia skaitytuvo** until a picture reader is chosen in the Configuration tab (`picture_reader`):
+
+| Option | What it needs | Quality |
+|---|---|---|
+| `none` (default) | nothing | image-only leaflets wait |
+| `tesseract` | ~25 MB language files (downloaded into the app's data) | reads names and plainly printed prices; often misses big stylised prices. Fine for a small HA box |
+| `ollama` | **on this box**: the Ollama runtime (~1.5 GB download, ~100 MB kept) and the model (`qwen2.5vl:7b` ~6 GB; ~8–10 GB RAM while reading). **With `ollama_url`**: nothing here – an Ollama on another computer does the work | best: names with Lithuanian letters, prices, old prices, discounts, card prices, picture of each offer |
+
+Choosing a reader downloads what it needs in the background (progress on **Būsena** → "Paveikslėlių skaitytuvas" and
+in the log); switching to another reader deletes the files of the old one. These files are not in backups.
+With a local Ollama, it runs only while an image-only leaflet is read (at the night check, lowest priority, the
+`threads` option sets its CPU threads) and frees its memory two minutes after the last page; expect about 1–3
+minutes per page on a laptop CPU. Leaflets that waited are read at the next night check once the reader is ready.
+
+For an external Ollama: install Ollama on the PC, run `ollama pull qwen2.5vl:7b` there, make it listen on the
+network (`OLLAMA_HOST=0.0.0.0`) and set `ollama_url`, e.g. `http://192.168.1.20:11434`. The model is never pulled
+onto another computer from here. Offers read from pictures are marked in the offer details (`vision` / `ocr`).
+
 ## Logs
 Logs are in the app's **Log** tab and in `/data/logs/leidiniai.log` (5 MB × 10 files). When something looks
 wrong, press **Atsisiųsti žurnalus** on the Būsena page: the ZIP holds the log files, the last 20 check

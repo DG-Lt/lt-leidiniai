@@ -133,6 +133,7 @@ class Rimi(Fetcher):
             return files
         self.log.info("Rimi %s: %s → images only, waits for the picture reader", issue.key, why)
         issue.parser = "vision"
+        issue.meta["parser"] = "vision"
         issue.prefetched = {"enrichments.json": json.dumps({"source": issue.source_url, "enrichments": [],
                                                             "note": why}, ensure_ascii=False).encode()}
         issue.files = []

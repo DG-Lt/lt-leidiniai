@@ -16,8 +16,9 @@ def test_version_matches_config_yaml():
     assert "mqtt:need" in cfg["services"]
     # every option has a schema entry and a translation
     tr = yaml.safe_load((ROOT / "leidiniai" / "translations" / "lt.yaml").read_text(encoding="utf-8"))
-    assert set(cfg["options"]) == set(cfg["schema"]) == set(tr["configuration"])
-    assert set(cfg["options"]) == set(config.DEFAULTS)
+    required = {k for k, v in cfg["schema"].items() if not str(v).endswith("?")}  # optional ones: no default
+    assert set(cfg["options"]) == required and set(cfg["schema"]) == set(tr["configuration"])
+    assert set(cfg["schema"]) == set(config.DEFAULTS)
 
 
 def test_options_loaded(tmp_path):

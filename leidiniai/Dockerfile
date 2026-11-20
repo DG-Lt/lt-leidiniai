@@ -15,8 +15,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     LANG=C.UTF-8
 
+# tesseract-ocr (+ its eng data, a few MB): picture_reader tesseract – Lithuanian data is downloaded into /data
+# zstd: unpacks the Ollama runtime when picture_reader is ollama on this box
 RUN apt-get update \
  && apt-get install -y --no-install-recommends util-linux tzdata ca-certificates libatomic1 \
+    tesseract-ocr zstd \
  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /tmp/requirements.txt

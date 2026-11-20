@@ -26,8 +26,9 @@ def main() -> int:
             recategorise_if_changed(conn, log)
         except Exception as e:
             log.warning("Categories not re-sorted: %s", e)
-    from . import logos
+    from . import logos, vision
     logos.tidy_existing(settings, log)
+    vision.start_background(settings, log)  # downloads / deletes the picture reader's files
     runner = Runner(settings)
     from .mqtt import Bridge
     bridge = Bridge(settings, runner)

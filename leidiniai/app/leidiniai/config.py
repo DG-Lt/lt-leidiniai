@@ -17,6 +17,9 @@ DEFAULTS = {
     "keep_pdf_weeks": 8,
     "keep_images_weeks": 12,
     "log_level": "info",
+    "picture_reader": "none",          # none | tesseract | ollama – image-only leaflets (Šilas, some Rimi)
+    "ollama_url": "",                  # external Ollama (http://pc:11434); empty = run Ollama on this box
+    "ollama_model": "qwen2.5vl:7b",
 }
 
 
@@ -31,6 +34,9 @@ class Settings:
     keep_pdf_weeks: int = 8
     keep_images_weeks: int = 12
     log_level: str = "info"
+    picture_reader: str = "none"
+    ollama_url: str = ""
+    ollama_model: str = "qwen2.5vl:7b"
     port: int = 8099
     dev: bool = False  # local run outside HA: no ingress IP check
 
@@ -59,6 +65,14 @@ class Settings:
     def tmp_dir(self) -> Path:
         return self.data_dir / "tmp"
 
+    @property
+    def tessdata_dir(self) -> Path:
+        return self.data_dir / "models" / "tessdata"
+
+    @property
+    def ollama_dir(self) -> Path:
+        return self.data_dir / "ollama"
+
     def ensure_dirs(self) -> None:
         for p in (self.data_dir, self.pdf_dir, self.img_dir, self.log_dir,
                   self.log_dir / "runs", self.cache_dir, self.tmp_dir):
@@ -81,6 +95,10 @@ def load(data_dir: str | os.PathLike | None = None) -> Settings:
     s.request_delay = float(s.request_delay)
     s.threads = int(s.threads)
     s.chains = [c for c in CHAINS if c in (s.chains or [])]
+    if s.picture_reader not in ("none", "tesseract", "ollama"):
+        s.picture_reader = "none"
+    s.ollama_url = (s.ollama_url or "").strip().rstrip("/")
+    s.ollama_model = (s.ollama_model or "").strip() or DEFAULTS["ollama_model"]
     s.port = int(os.environ.get("LEIDINIAI_PORT", "8099"))
     s.dev = os.environ.get("LEIDINIAI_DEV") == "1"
     return s

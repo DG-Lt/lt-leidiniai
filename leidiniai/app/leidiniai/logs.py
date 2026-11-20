@@ -174,6 +174,10 @@ def build_zip(settings, runs: int = ZIP_RUNS) -> tuple[bytes, str]:
         if not files and settings.db_path.exists():
             _runs_from_db(settings, z, runs)
         z.writestr("env.json", json.dumps(environment(settings), ensure_ascii=False, indent=1, default=str))
+        for extra, arc in ((settings.data_dir / "picture_reader.json", "picture_reader.json"),
+                           (settings.ollama_dir / "serve.log", "logs/ollama-serve.log")):
+            if extra.exists():  # last 200 kB of the Ollama server log is plenty
+                z.writestr(arc, extra.read_bytes()[-200_000:].decode("utf-8", errors="replace"))
     return buf.getvalue(), f"leidiniai-logs-{stamp}.zip"
 
 
