@@ -21,6 +21,8 @@ def main() -> int:
     from .schedule import Runner
     with db.session(settings) as conn:
         log.info("Database schema version %s", conn.execute("PRAGMA user_version").fetchone()[0])
+    from . import logos
+    logos.tidy_existing(settings, log)
     runner = Runner(settings)
     from .mqtt import Bridge
     bridge = Bridge(settings, runner)

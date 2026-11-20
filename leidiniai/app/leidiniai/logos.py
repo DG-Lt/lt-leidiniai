@@ -56,12 +56,62 @@ def find(settings, chain: str, who: str | None = None) -> Path | None:
     return None
 
 
-def _write(settings, who: str, chain: str, data: bytes) -> Path:
+def clean(data: bytes, clear_white: bool = False) -> tuple[bytes, str]:
+    """Raster logo → PNG with the empty margins cut off (white or transparent around the logo), so it fills the
+    chip height. clear_white: also make the white background around the logo transparent (only the white that
+    touches the edges – white letters inside the logo stay). SVG is returned unchanged."""
+    ext = kind_of(data)
+    if ext in (None, ".svg"):
+        return data, ext
+    import io
+    from PIL import Image, ImageChops, ImageDraw
+    im = Image.open(io.BytesIO(data))
+    im.load()
+    im = im.convert("RGBA")
+    if clear_white:
+        w, h = im.size
+        rgb = im.convert("RGB")
+        mask = Image.new("L", im.size, 0)
+        seeds = [(x, y) for x in range(0, w, max(1, w // 40)) for y in (0, h - 1)] + \
+                [(x, y) for y in range(0, h, max(1, h // 40)) for x in (0, w - 1)]
+        for sx, sy in seeds:  # flood-fill near-white from the border
+            r, g, b = rgb.getpixel((sx, sy))
+            if min(r, g, b) >= 225 and mask.getpixel((sx, sy)) == 0:
+                ImageDraw.floodfill(rgb, (sx, sy), (1, 2, 3), thresh=40)
+        px = rgb.load()
+        mp = mask.load()
+        for y in range(h):
+            for x in range(w):
+                if px[x, y] == (1, 2, 3):
+                    mp[x, y] = 255
+        alpha = ImageChops.subtract(im.getchannel("A"), mask)
+        im.putalpha(alpha)
+    # margins: transparent pixels, or the corner colour when the picture has no transparency
+    alpha = im.getchannel("A")
+    box = alpha.point(lambda a: 255 if a > 16 else 0).getbbox()
+    if box and alpha.getextrema()[0] >= 250:  # opaque picture: cut the plain border of the corner colour
+        bg = Image.new("RGBA", im.size, im.getpixel((0, 0)))
+        diff = ImageChops.difference(im, bg).convert("L").point(lambda v: 255 if v > 24 else 0)
+        box = diff.getbbox() or box
+    if box:
+        im = im.crop(box)
+    if im.height > 160:  # chips are ~20–28 px high; keep files small
+        im = im.resize((max(1, round(im.width * 160 / im.height)), 160), Image.LANCZOS)
+    out = io.BytesIO()
+    im.save(out, "PNG", optimize=True)
+    return out.getvalue(), ".png"
+
+
+def _write(settings, who: str, chain: str, data: bytes, clear_white: bool = False) -> Path:
     ext = kind_of(data)
     if not ext:
         raise ValueError("ne paveikslėlis (tinka PNG, JPG, WEBP, SVG)")
     if len(data) > MAX_BYTES:
         raise ValueError(f"per didelis failas (daugiausia {MAX_BYTES // 1024} KB)")
+    try:
+        data, ext = clean(data, clear_white)
+    except Exception as e:  # a picture Pillow can't read: refuse rather than store something broken
+        raise ValueError(f"nepavyko apdoroti paveikslėlio ({e})") from e
     d = folder(settings)
     d.mkdir(parents=True, exist_ok=True)
     for e in EXT:
@@ -71,8 +121,28 @@ def _write(settings, who: str, chain: str, data: bytes) -> Path:
     return p
 
 
-def save_upload(settings, chain: str, data: bytes) -> Path:
-    return _write(settings, "user", chain, data)
+def save_upload(settings, chain: str, data: bytes, clear_white: bool = True) -> Path:
+    return _write(settings, "user", chain, data, clear_white)
+
+
+def tidy_existing(settings, log: logging.Logger) -> None:
+    """At start: cut the margins of logos saved by 0.4.5 (no trimming then). Idempotent; never raises."""
+    d = folder(settings)
+    if not d.exists():
+        return
+    for p in d.glob("*.*"):
+        if p.suffix not in (".png", ".jpg", ".webp") or (d / ".tidy-1").exists():
+            continue
+        try:
+            data, ext = clean(p.read_bytes(), clear_white=False)
+            p.unlink()
+            p.with_suffix(ext).write_bytes(data)
+        except Exception as e:
+            log.warning("logo %s not tidied: %s", p.name, e)
+    try:
+        (d / ".tidy-1").touch()
+    except OSError:
+        pass
 
 
 def remove_upload(settings, chain: str) -> None:

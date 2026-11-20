@@ -11,6 +11,8 @@ Open the **Leidiniai** panel in the sidebar. Options are explained in the Config
   "Įsiminti raktažodį" (remember keyword) teaches the category dictionary; all products not set by hand are
   then sorted again.
   **Stebimi viršuje** puts the watch-list matches first (other filters and the sort still apply).
+  **Tikslus žodis** matches whole words only (any order). **Netrukus** lists offers that start later – usually the
+  next week's leaflets, which appear a few days before they start.
 - **Stebimi** – the watch list: words to look for in every new leaflet, with the matching offers.
 - **Leidiniai** – leaflets found, their state, the last checks (click one for its summary) and a "check now" button.
 - **Būsena** – version, options, **Tinklų logotipai** (chain logos: downloaded from the shops' sites, or upload your

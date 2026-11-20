@@ -325,3 +325,50 @@ def test_panel_logo_and_watched_first(settings):
     assert r.mimetype == "image/png" and "default-src 'none'" in r.headers["Content-Security-Policy"]
     assert c.get("/logo/nope").status_code == 404
     assert "Tinklų logotipai" in c.get("/busena").get_data(as_text=True)
+
+
+def test_exact_word_search_and_offer_dates_from_leaflet(settings):
+    from leidiniai import db, job
+    from leidiniai.fetchers.base import IssueInfo
+    from leidiniai.web import create_app
+    from datetime import date as d
+    conn = db.open_db(settings)
+    with conn:
+        iid = conn.execute("INSERT INTO issues(chain,key,series,title,status,first_seen,last_seen)"
+                           " VALUES('iki','K','s','ATSIŲSTI LEIDINĮ','parsed','t','t')").lastrowid
+        for seq, name in enumerate(["Alus ŠVYTURYS, 0,5 l", "Natūralus jogurtas", "Nealkoholinis alus"]):
+            key = name.lower().replace("š", "s").replace("ū", "u").replace(",", "")
+            pid = conn.execute("INSERT INTO products(chain,ident,name,name_key,first_seen,last_seen) VALUES('iki',?,?,?,'t','t')",
+                               (key, name, key)).lastrowid
+            conn.execute("INSERT INTO offers(issue_id,product_id,chain,seq,kind,name,name_key,price) VALUES(?,?,?,?,?,?,?,?)",
+                         (iid, pid, "iki", seq, "price", name, key, 100))
+    # the leaflet's dates become known later → its offers get them
+    job.upsert(conn, IssueInfo(chain="iki", key="K", series="kainu-leidinys", title="IKI Kainų leidinys Nr. 47",
+                               valid_from=d(2026, 11, 16), valid_to=d(2099, 11, 22)), "t2")
+    assert {tuple(r) for r in conn.execute("SELECT valid_from, valid_to FROM offers")} == {("2026-11-16", "2099-11-22")}
+    c = create_app(settings).test_client()
+    t = c.get("/?q=alus&sort=name").get_data(as_text=True)
+    assert "Natūralus" in t and "ŠVYTURYS" in t and "Rasta: 3" in t
+    t = c.get("/?q=alus&exact=1&sort=name").get_data(as_text=True)
+    assert "Natūralus" not in t and "ŠVYTURYS" in t and "Nealkoholinis" in t and "Rasta: 2" in t
+    t = c.get("/?q=alus+nealkoholinis&exact=1").get_data(as_text=True)  # order does not matter
+    assert "Rasta: 1" in t
+
+
+def test_logo_clean_trims_and_clears_white():
+    import io
+    from PIL import Image
+    from leidiniai import logos
+    im = Image.new("RGB", (100, 60), "white")
+    for x in range(30, 70):
+        for y in range(20, 40):
+            im.putpixel((x, y), (255, 255, 255) if 45 <= x < 55 and 25 <= y < 35 else (200, 0, 0))  # red box, white inside
+    b = io.BytesIO()
+    im.save(b, "PNG")
+    data, ext = logos.clean(b.getvalue(), clear_white=False)
+    assert ext == ".png" and Image.open(io.BytesIO(data)).size == (40, 20)
+    data, _ = logos.clean(b.getvalue(), clear_white=True)
+    out = Image.open(io.BytesIO(data)).convert("RGBA")
+    assert out.size == (40, 20) and out.getpixel((20, 10))[3] == 255  # white inside the logo stays
+    svg = b"<svg xmlns='http://www.w3.org/2000/svg'/>"
+    assert logos.clean(svg, True) == (svg, ".svg")

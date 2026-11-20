@@ -39,7 +39,7 @@ def logo_upload(chain):
         try:
             if not data:
                 raise ValueError("nepasirinktas failas")
-            logos.save_upload(settings(), chain, data)
+            logos.save_upload(settings(), chain, data, clear_white=request.form.get("white") == "1")
             flash(f"{CHAIN_NAMES[chain]}: logotipas įkeltas.")
         except ValueError as e:
             flash(f"{CHAIN_NAMES[chain]}: {e}.")
