@@ -47,7 +47,7 @@ def main() -> int:
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, stop)
-    serve(app, host="0.0.0.0", port=settings.port, threads=4, ident=None)
+    serve(app, host="0.0.0.0", port=settings.port, threads=8, ident=None)
     return 0
 
 

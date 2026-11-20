@@ -148,3 +148,13 @@ def test_migration_3_drops_iki_footer_pdfs(tmp_path):
         conn.execute("PRAGMA user_version=2")
     assert db.migrate(conn) == len(db.MIGRATIONS)
     assert [r[0] for r in conn.execute("SELECT key FROM issues")] == ["IKI-Nr_47-2026-11-16-11-22-d-koreguotas"]
+
+
+def test_maxima_discover_uuid_ids():
+    import logging
+    from pathlib import Path
+    from leidiniai.fetchers import maxima
+    html = (Path(__file__).parent / "synthetic" / "maxima_synthetic.html").read_text(encoding="utf-8")
+    out = maxima.Maxima(FakeHttp({maxima.Maxima.listing_url: html}), logging.getLogger("t"), REF).discover()
+    assert len(out) == 1 and out[0].meta["offers"] == 3 and out[0].valid_to == date(2026, 11, 16)
+    assert out[0].title == "Pasiūlymai (3) iki 2026-11-16"
