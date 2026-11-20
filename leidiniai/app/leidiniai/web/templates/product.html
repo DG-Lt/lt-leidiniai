@@ -6,7 +6,7 @@
   <div class="pimg">{% set src = image_url(p.image) %}{% if src %}<img src="{{ src }}" alt="" referrerpolicy="no-referrer">{% endif %}</div>
   <div>
     <h1>{{ p.name or '(pavadinimas neatpažintas)' }}</h1>
-    <p><span class="chain c-{{ p.chain }}">{{ CHAIN_NAMES[p.chain] }}</span>
+    <p>{% set lg = logo_url(p.chain) %}{% if lg %}<img class="logo" src="{{ lg }}" alt="{{ CHAIN_NAMES[p.chain] }}" title="{{ CHAIN_NAMES[p.chain] }}">{% else %}<span class="chain c-{{ p.chain }}">{{ CHAIN_NAMES[p.chain] }}</span>{% endif %}
       {% if p.quantity %} · {{ p.quantity }}{% endif %}
       · {{ CATEGORIES.get(p.category, p.category) }}{% if p.category_source == 'user' %} <span class="muted">(nustatyta rankiniu būdu)</span>{% endif %}</p>
     <p class="muted">Pasiūlymų: {{ stats.n }}{% if stats.min is not none %} · mažiausia kaina {{ stats.min|money }} · didžiausia {{ stats.max|money }}{% endif %}

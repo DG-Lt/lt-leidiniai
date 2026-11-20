@@ -12,7 +12,7 @@
 
 <h2 id="logotipai">Tinklų logotipai</h2>
 <p class="muted small">Rodomi pasiūlymų kortelėse. Atsisiunčiami iš tinklo svetainės po pirmo tikrinimo; savo failą (PNG, JPG, WEBP, SVG, iki 512 KB)
-galite įkelti – jis visada naudojamas vietoj atsisiųsto.</p>
+galite įkelti – jis visada naudojamas vietoj atsisiųsto. Tuščios paraštės aplink logotipą nukerpamos automatiškai.</p>
 <div class="card">
 <table>
   {% for r in logo_rows %}
@@ -20,7 +20,9 @@ galite įkelti – jis visada naudojamas vietoj atsisiųsto.</p>
     <td>{% if r.url %}<img class="logo" src="{{ r.url }}" alt="{{ r.name }}">{% else %}<span class="chain c-{{ r.chain }}">{{ r.name }}</span>{% endif %}
       <span class="muted small">{{ 'įkeltas' if r.user else 'atsisiųstas' if r.auto else 'dar nėra' }}</span></td>
     <td><form method="post" action="{{ url_for('ui.logo_upload', chain=r.chain) }}" enctype="multipart/form-data" class="inline">
-      <input type="file" name="file" accept=".png,.jpg,.jpeg,.webp,.svg,image/*"> <button class="secondary">Įkelti</button>
+      <input type="file" name="file" accept=".png,.jpg,.jpeg,.webp,.svg,image/*">
+      <label class="check small" title="Baltas fonas aplink logotipą tampa permatomas (balti elementai logotipo viduje lieka)"><input type="checkbox" name="white" value="1" checked> be balto fono</label>
+      <button class="secondary">Įkelti</button>
       {% if r.user %}<button class="secondary" name="remove" value="1">Pašalinti įkeltą</button>{% endif %}
     </form></td></tr>
   {% endfor %}

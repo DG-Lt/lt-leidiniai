@@ -33,6 +33,9 @@ def upsert(conn, info, now) -> tuple[int, bool]:
                              " valid_from=COALESCE(?,valid_from), valid_to=COALESCE(?,valid_to), meta=? WHERE id=?",
                              (now, info.title, info.series, info.number, vf, vt,
                               json.dumps(info.meta, ensure_ascii=False), r["id"]))
+                if vf or vt:  # dates learnt later (IKI 0.4.0 → 0.4.1): offers without own dates follow the leaflet
+                    conn.execute("UPDATE offers SET valid_from=COALESCE(valid_from, ?), valid_to=COALESCE(valid_to, ?)"
+                                 " WHERE issue_id=?", (vf, vt, r["id"]))
             return r["id"], False
         cur = conn.execute(
             "INSERT INTO issues(chain,key,series,title,number,valid_from,valid_to,source_url,meta,status,first_seen,last_seen)"

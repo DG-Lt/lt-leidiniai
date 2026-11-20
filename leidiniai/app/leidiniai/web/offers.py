@@ -66,14 +66,18 @@ def _filters(args):
             "when": args.get("when") if args.get("when") in WHEN_LT else "now",
             "sort": args.get("sort") if args.get("sort") in SORTS else "disc",
             "disc": "1" if args.get("disc") == "1" else "", "nocard": "1" if args.get("nocard") == "1" else "",
-            "top": "1" if args.get("top") == "1" else ""}
+            "top": "1" if args.get("top") == "1" else "", "exact": "1" if args.get("exact") == "1" else ""}
 
 
 def _where(f, today: date, with_chain: bool = True) -> tuple[str, list]:
     where, a = current_where(today, f["when"])
-    for word in fold(f["q"]).split():
-        where += " AND o.name_key LIKE ?"
-        a.append(f"%{word}%")
+    for word in fold(f["q"]).split():  # every word must be there, in any order
+        if f["exact"]:  # "Tikslus žodis": whole words only ("alus" no longer finds "natūralus")
+            where += " AND (' ' || o.name_key || ' ') LIKE ?"
+            a.append(f"% {word} %")
+        else:
+            where += " AND o.name_key LIKE ?"
+            a.append(f"%{word}%")
     if with_chain and f["chain"]:
         where += " AND o.chain=?"
         a.append(f["chain"])

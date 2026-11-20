@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.7
+- Logos: no white box around them any more; empty margins around a logo are cut off automatically (also for the
+  logos already saved). When uploading, **be balto fono** (on by default) makes the white background around your
+  logo transparent – white letters inside the logo stay. The product page shows the logo too.
+- **Tikslus žodis** checkbox on Pasiūlymai: search words must match whole words (any order) – "alus" no longer
+  finds "Natūralus". Note: Lithuanian endings count, so "alus" won't find "alaus".
+- IKI Nr. 47 offers had no validity dates (stored before 0.4.1 knew them): offers now take their leaflet's dates,
+  for the existing ones too (database update 4).
+
 ## 0.4.6
 - Rimi: catalogues without product links (the alcohol catalogue Nr. 23, the wine championship catalogue) no
   longer end the check with an error and are not retried every night: they are kept as **laukia skaitytuvo**

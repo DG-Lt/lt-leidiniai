@@ -131,6 +131,13 @@ MIGRATIONS: list[str] = [
         AND (lower(key) LIKE '%privatumo%' OR lower(key) LIKE '%tvarka%' OR lower(key) LIKE '%taisykl%'
              OR lower(key) LIKE '%politika%' OR lower(key) LIKE '%salygos%');
     """,
+    # 4 (0.4.7): offers stored before their leaflet's dates were known get the leaflet's dates
+    """
+    UPDATE offers SET
+        valid_from = COALESCE(valid_from, (SELECT i.valid_from FROM issues i WHERE i.id = offers.issue_id)),
+        valid_to   = COALESCE(valid_to,   (SELECT i.valid_to   FROM issues i WHERE i.id = offers.issue_id))
+    WHERE valid_from IS NULL OR valid_to IS NULL;
+    """,
 ]
 
 
