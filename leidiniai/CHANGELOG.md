@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.6
+- Rimi: catalogues without product links (the alcohol catalogue Nr. 23, the wine championship catalogue) no
+  longer end the check with an error and are not retried every night: they are kept as **laukia skaitytuvo**
+  (pictures only, for the later picture-reader step, like Šilas). The one that failed is fixed at the next Rimi check.
+
 ## 0.4.5
 - Offer cards show the chain's logo. It is downloaded once from the shop's own site after that chain's next check
   (refreshed every 30 days); on **Būsena → Tinklų logotipai** you can upload your own file instead (PNG, JPG, WEBP,

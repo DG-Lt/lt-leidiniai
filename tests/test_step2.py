@@ -191,3 +191,20 @@ def test_rimi_lookups_progress_and_cache(tmp_path, caplog):
     assert len(h.asked) == 30  # the second leaflet's identical spots come from the cache
     assert "e-shop lookups 25/30" in caplog.text and "(0 new)" in caplog.text
     assert len(json.loads((tmp_path / "b" / "eshop.json").read_text())) == 30
+
+
+def test_rimi_catalogue_without_product_links_waits_for_picture_reader(tmp_path):
+    import json
+    import logging
+    from types import SimpleNamespace
+    from leidiniai.fetchers import rimi
+    from leidiniai.fetchers.base import IssueInfo
+    for captured in ([], [{"url": "x/Enrichments/1", "body": json.dumps({"enrichments": [
+            {"pageIndex": 0, "url": "https://www.rimi.lt/vynai"}]})}]):
+        h = SimpleNamespace(delay=0, browser_pages=0,
+                            browser=SimpleNamespace(render=lambda *a, c=captured, **k: SimpleNamespace(captured=c)))
+        info = IssueInfo(chain="rimi", key="2026/alko/x", series="x", title="x", source_url="https://leidiniai.rimi.lt/x/",
+                         parser="rimi")
+        d = tmp_path / str(len(captured))
+        files = rimi.Rimi(h, logging.getLogger("t"), REF).download(info, d)
+        assert info.parser == "vision" and [f["name"] for f in files] == ["enrichments.json"]
