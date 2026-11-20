@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3
+- Maxima: 0.4.2 still found no offers – the page writes the id attribute as `data-offerCard-offer-id` (capital C)
+  and the check was case-sensitive. Fixed; the test page now uses the same spelling.
+
 ## 0.4.2
 - Maxima: offers were not found since Maxima changed its offer ids (numbers → UUIDs on 2026-11-20); fixed.
   New Maxima sections mapped: Buitinė chemija → Namų priežiūra, Prekės gyvūnams → Gyvūnams, Konditerija → Duona ir
