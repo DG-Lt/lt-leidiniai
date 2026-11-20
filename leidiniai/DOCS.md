@@ -18,6 +18,14 @@ Open the **Leidiniai** panel in the sidebar. Options are explained in the Config
 - **Būsena** – version, options, **Tinklų logotipai** (chain logos: downloaded from the shops' sites, or upload your
   own), the last log lines and **Atsisiųsti žurnalus**.
 
+## Categories
+A product's category comes from, in this order: the shop's own category (Maxima, Rimi) → a keyword you taught
+("Įsiminti raktažodį") → the category of the most similar products that a shop or you have categorised →
+the built-in keyword list. Every correction you make counts for similar products too and re-sorts them at once;
+products you set by hand never change by themselves.
+
+Norfa's website promotions (fish counter, weekend discounts …) are listed next to the Norfa leaflet.
+
 ## Home Assistant entities
 Install the **Mosquitto broker** app and the MQTT integration first; Leidiniai finds the broker by itself.
 All entities belong to the device **Leidiniai**:

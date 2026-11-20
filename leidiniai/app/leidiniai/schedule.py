@@ -46,8 +46,7 @@ def due(conn, chain: str, today: date) -> tuple[bool, str, date]:
             continue  # series no longer listed
         newest = max(rows, key=lambda i: (i["valid_to"] or "", i["first_seen"]))
         end = newest["valid_to"]
-        if chain == "maxima":
-            end = json.loads(newest["meta"] or "{}").get("min_to") or end
+        end = json.loads(newest["meta"] or "{}").get("min_to") or end  # offers pages: when the first one ends
         if end:
             ends.append(date.fromisoformat(end))
     window = WINDOW.get(chain, DEFAULT_WINDOW)

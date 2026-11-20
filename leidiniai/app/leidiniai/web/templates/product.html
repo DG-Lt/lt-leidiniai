@@ -8,7 +8,7 @@
     <h1>{{ p.name or '(pavadinimas neatpažintas)' }}</h1>
     <p>{% set lg = logo_url(p.chain) %}{% if lg %}<img class="logo" src="{{ lg }}" alt="{{ CHAIN_NAMES[p.chain] }}" title="{{ CHAIN_NAMES[p.chain] }}">{% else %}<span class="chain c-{{ p.chain }}">{{ CHAIN_NAMES[p.chain] }}</span>{% endif %}
       {% if p.quantity %} · {{ p.quantity }}{% endif %}
-      · {{ CATEGORIES.get(p.category, p.category) }}{% if p.category_source == 'user' %} <span class="muted">(nustatyta rankiniu būdu)</span>{% endif %}</p>
+      · {{ CATEGORIES.get(p.category, p.category) }}{% if p.category_source == 'user' %} <span class="muted">(nustatyta rankiniu būdu)</span>{% elif p.category_source == 'similar' %} <span class="muted" title="Pagal panašius produktus, kuriems kategoriją nurodė tinklas arba jūs">(pagal panašius produktus)</span>{% elif p.category_source == 'shop' %} <span class="muted">(tinklo kategorija)</span>{% endif %}</p>
     <p class="muted">Pasiūlymų: {{ stats.n }}{% if stats.min is not none %} · mažiausia kaina {{ stats.min|money }} · didžiausia {{ stats.max|money }}{% endif %}
       · pirmą kartą {{ p.first_seen|day }}</p>
     {% if p.name_key and not is_watched %}

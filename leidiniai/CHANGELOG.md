@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.5.0
+- **Categories learn from the shops and from you.** Maxima and Rimi sort every offer into their own categories,
+  and your corrections count three times as much: a product now gets the category of the most similar of those
+  products (sharing at least two significant words). The product page says "pagal panašius produktus" then.
+  Every correction re-sorts the other products straight away; after each check all products not set by hand
+  are sorted again, so it improves as more leaflets come in. On the first start all of them are re-sorted once.
+- Words in genitive plural ("česnakų", "žolelių") describe a product and no longer decide its category:
+  "Krevetės žolelių ir česnakų marinate" → Žuvis. "Kremas" alone is no longer cosmetics (only "veido / rankų /
+  kūno … kremas" are), "skalbimo kapsulės" are household, not coffee.
+- **Norfa: promotions from the website** (https://www.norfa.lt/akciju-puslapiai/akcijos/) – the short offers that
+  are not in the leaflet (fish counter, weekend discounts …): price or percentage, dates, picture; news and
+  games on that page are skipped. Read at every Norfa check (a few pages, spaced as usual).
+- Leaflets that print no prices at all (the IKI and Rimi wine award catalogues) are no longer reported as a
+  problem.
+
 ## 0.4.7
 - Logos: no white box around them any more; empty margins around a logo are cut off automatically (also for the
   logos already saved). When uploading, **be balto fono** (on by default) makes the white background around your

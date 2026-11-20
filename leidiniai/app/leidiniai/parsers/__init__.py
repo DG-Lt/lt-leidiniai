@@ -104,6 +104,11 @@ def parse_issue(chain: str, parser: str, files: list[dict], meta: dict, ref: dat
         from . import rimi
         by = {f["name"]: f["path"] for f in files}
         return rimi.parse(by["enrichments.json"], by["eshop.json"])
+    if parser == "norfa_promos":
+        from . import norfa_promos
+        htmls = [open(f["path"], encoding="utf-8").read() for f in sorted(files, key=lambda f: f["name"])
+                 if f["name"].endswith(".html")]
+        return norfa_promos.parse_pages(htmls, ref)
     if parser == "pdf":
         from . import pdf_text
         out: list[Offer] = []

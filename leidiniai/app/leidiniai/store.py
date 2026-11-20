@@ -103,5 +103,17 @@ def set_category(conn, product_id: int, category: str, keyword: str | None = Non
             conn.execute("INSERT INTO category_keywords(keyword_key,category,source,created) VALUES(?,?,'user',?)"
                          " ON CONFLICT(keyword_key) DO UPDATE SET category=excluded.category, source='user'",
                          (k, category, now_iso()))
-    if k:
-        recategorise(conn)
+    # every correction is also an example for similar names (category learning): sort the rest again
+    recategorise(conn)
+
+
+CATEGORIES_VERSION = 2  # bump when the classifier changes: unlocked products are sorted again once at start
+
+
+def recategorise_if_changed(conn, log) -> None:
+    from .db import kv_get, kv_set
+    if kv_get(conn, "categories_version", 1) >= CATEGORIES_VERSION:
+        return
+    n = recategorise(conn)
+    kv_set(conn, "categories_version", CATEGORIES_VERSION)
+    log.info("Categories: classifier updated, %d product(s) moved to another category", n)

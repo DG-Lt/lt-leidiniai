@@ -1,5 +1,5 @@
 name: Leidiniai
-version: "0.4.7"
+version: "0.5.0"
 slug: leidiniai
 description: Lietuvos prekybos tinklų akcijų leidiniai (IKI, Rimi, Maxima, Norfa, Lidl, Šilas) – vietinis apdorojimas
 url: https://github.com/DG-Lt/lt-leidiniai

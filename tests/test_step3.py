@@ -22,7 +22,7 @@ import pytest
 
 from leidiniai import db, pipeline, store
 from leidiniai.categories import CATEGORIES, Classifier
-from leidiniai.parsers import cents, maxima, pdf_text, rimi
+from leidiniai.parsers import Offer, cents, maxima, pdf_text, rimi
 
 FX = Path(os.environ.get("LEIDINIAI_FIXTURES") or Path(__file__).resolve().parent / "fixtures")
 SYN = Path(__file__).resolve().parent / "synthetic"
@@ -375,3 +375,40 @@ def test_job_downloads_and_parses(settings, monkeypatch):
     assert conn.execute("SELECT status, offers FROM issues").fetchone()[:] == ("parsed", 6)
     s2 = job.run("norfa", "manual", settings)  # nothing new: no second parse
     assert s2["status"] == "ok" and not s2.get("parsed")
+
+
+# ---------------------------------------------------------------- 0.5.0: category learning
+
+def test_describing_words_do_not_decide():
+    c = Classifier()
+    assert c.classify("iki", "Krevetės žolelių ir česnakų marinate, 300 g", None) == ("fish", "keyword")
+    assert c.classify("iki", "Česnakų skiltelės", None)[0] == "fruit_veg"  # only a describing word: still used
+    assert c.classify("iki", "Šokoladinis kremas NUTELLA, 400 g", None)[0] == "sweets"
+    assert c.classify("iki", "Veido kremas NIVEA, 50 ml", None)[0] == "hygiene"
+    assert c.classify("lidl", "Skalbimo kapsulės PERSIL, 30 vnt.", None)[0] == "household"
+
+
+def test_similar_names_vote():
+    from leidiniai.categories import Similar
+    s = Similar([("Varškės sūrelis su vanile VILVI, 40 g", "dairy", 1), ("Tepamas varškės kremas VILVI", "dairy", 1),
+                 ("Varškės kremas su krapais", "dairy", 1), ("Rankų kremas NIVEA", "hygiene", 1),
+                 ("Mango jogurtas", "dairy", 1), ("Mango jogurtas su granola", "dairy", 1)])
+    assert s.guess("Varškės kremas su vanile, 200 g")[0] == "dairy"
+    assert s.guess("Mangas 1 vnt") is None  # one shared word is not enough
+    assert s.guess("Dviratis 26 colių") is None
+
+
+def test_corrections_teach_similar_products(settings):
+    conn = db.open_db(settings)
+    iid = add_issue(conn, "iki", "K", [])
+    names = ["Kalėdinis pyragas su razinomis 500 g", "Kalėdinis pyragas su riešutais 400 g",
+             "Kalėdinis pyragas su vyšniomis 450 g"]
+    offers = [Offer(chain="iki", name=n, kind="price", price=399) for n in names]
+    store.save_offers(conn, conn.execute("SELECT * FROM issues WHERE id=?", (iid,)).fetchone(), offers)
+    cats = lambda: {r[0]: r[1] for r in conn.execute("SELECT name, category FROM products")}
+    assert set(cats().values()) == {"bakery"}  # built-in keyword "pyrag"
+    ids = [r[0] for r in conn.execute("SELECT id FROM products ORDER BY id")]
+    store.set_category(conn, ids[0], "sweets")
+    store.set_category(conn, ids[1], "sweets")
+    assert cats()[names[2]] == "sweets"  # learnt from the two corrections, no keyword taught
+    assert conn.execute("SELECT category_source FROM products WHERE id=?", (ids[2],)).fetchone()[0] == "similar"

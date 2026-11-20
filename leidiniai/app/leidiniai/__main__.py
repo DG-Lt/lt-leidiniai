@@ -21,6 +21,11 @@ def main() -> int:
     from .schedule import Runner
     with db.session(settings) as conn:
         log.info("Database schema version %s", conn.execute("PRAGMA user_version").fetchone()[0])
+        from .store import recategorise_if_changed
+        try:
+            recategorise_if_changed(conn, log)
+        except Exception as e:
+            log.warning("Categories not re-sorted: %s", e)
     from . import logos
     logos.tidy_existing(settings, log)
     runner = Runner(settings)
