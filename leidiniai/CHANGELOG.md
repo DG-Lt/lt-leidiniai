@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.4
+- Rimi: the e-shop look-ups (one per product spot, `request_delay` apart – about 15–20 min for the weekly leaflet at
+  4 s) now log the expected time at the start and progress every 25 look-ups, so a long check no longer looks stuck.
+- Rimi: a product already looked up for another leaflet in the same check is not asked again.
+
 ## 0.4.3
 - Maxima: 0.4.2 still found no offers – the page writes the id attribute as `data-offerCard-offer-id` (capital C)
   and the check was case-sensitive. Fixed; the test page now uses the same spelling.

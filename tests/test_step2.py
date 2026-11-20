@@ -158,3 +158,36 @@ def test_maxima_discover_uuid_ids():
     out = maxima.Maxima(FakeHttp({maxima.Maxima.listing_url: html}), logging.getLogger("t"), REF).discover()
     assert len(out) == 1 and out[0].meta["offers"] == 3 and out[0].valid_to == date(2026, 11, 16)
     assert out[0].title == "Pasiūlymai (3) iki 2026-11-16"
+
+
+def test_rimi_lookups_progress_and_cache(tmp_path, caplog):
+    import json
+    import logging
+    from types import SimpleNamespace
+    from leidiniai.fetchers import rimi
+    from leidiniai.fetchers.base import IssueInfo
+
+    spots = [{"pageIndex": 0, "x": 0, "y": 0, "width": 1, "height": 1,
+              "url": f"https://www.rimi.lt/e-parduotuve/lt/paieska?query={i}"} for i in range(30)]
+
+    class H:
+        delay = 0.0
+        browser_pages = 0
+        asked = []
+        browser = SimpleNamespace(render=lambda *a, **k: SimpleNamespace(
+            captured=[{"url": "x/Enrichments/1", "body": json.dumps({"enrichments": spots})}]))
+
+        def text(self, url, **kw):
+            self.asked.append(url)
+            return '<div class="card"><div data-gtm-eec-product=\'{"id": "1", "name": "X", "price": 1.0}\'></div></div>'
+
+    h = H()
+    f = rimi.Rimi(h, logging.getLogger("t.rimi"), REF)
+    caplog.set_level(logging.INFO, "t.rimi")
+    for k in ("a", "b"):
+        info = IssueInfo(chain="rimi", key=k, series="weekly", title=k, source_url="https://leidiniai.rimi.lt/x/")
+        (tmp_path / k).mkdir()
+        f.download(info, tmp_path / k)
+    assert len(h.asked) == 30  # the second leaflet's identical spots come from the cache
+    assert "e-shop lookups 25/30" in caplog.text and "(0 new)" in caplog.text
+    assert len(json.loads((tmp_path / "b" / "eshop.json").read_text())) == 30

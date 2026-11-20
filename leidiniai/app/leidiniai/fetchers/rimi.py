@@ -60,11 +60,19 @@ class Rimi(Fetcher):
             q = parse_qs(urlparse(s["url"] or "").query).get("query", [None])[0]
             if q and q not in queries:
                 queries.append(q)
-        self.log.info("Rimi %s: %d hotspots, %d e-shop lookups", issue.key, len(spots), len(queries))
+        cache = self.__dict__.setdefault("_eshop_cache", {})  # same query in two leaflets of one check: ask once
+        todo = [q for q in queries if q not in cache]
+        delay = getattr(self.http, "delay", 0) or 0
+        self.log.info("Rimi %s: %d hotspots, %d e-shop lookups (%d new), about %.0f min at %.1f s apart",
+                      issue.key, len(spots), len(queries), len(todo), len(todo) * delay * 1.15 / 60, delay)
         from bs4 import BeautifulSoup
-        shop = {}
+        shop = {q: cache[q] for q in queries if q in cache}
         t0 = time.monotonic()
-        for q in queries:
+        for n, q in enumerate(todo, 1):
+            if n % 25 == 0:
+                el = time.monotonic() - t0
+                self.log.info("Rimi %s: e-shop lookups %d/%d, about %.0f min left", issue.key, n, len(todo),
+                              el / n * (len(todo) - n) / 60)
             try:
                 h = self.http.text(ESHOP.format(q=quote(q)), browser_ok=False)
             except Exception as e:
@@ -81,7 +89,7 @@ class Rimi(Fetcher):
                 img = card.find("img")
                 res.append({"gtm": g, "text": re.sub(r"\s+", " ", card.get_text(" ")).strip()[:300],
                             "img": (img.get("src") or img.get("data-src")) if img else None})
-            shop[q] = res
+            shop[q] = cache[q] = res
         self.log.info("Rimi %s: e-shop lookups took %.0f s", issue.key, time.monotonic() - t0)
         issue.prefetched = {
             "enrichments.json": json.dumps({"source": issue.source_url, "enrichments": spots}, ensure_ascii=False).encode(),
