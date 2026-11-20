@@ -66,6 +66,9 @@ def parse(html: str, ref: date) -> list[Offer]:
         if d:
             vf, vt = parse_range(d, ref)
             o.valid_from, o.valid_to = vf, vt
+        shop = _t(el, "offer-price-tag__meta-shop")
+        if shop:
+            o.extra["shops"] = shop
         label = _t(el, "offer-price-tag__meta-label")
         if label:
             o.extra["label"] = label

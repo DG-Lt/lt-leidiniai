@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.2
+- Maxima: offers were not found since Maxima changed its offer ids (numbers → UUIDs on 2026-11-20); fixed.
+  New Maxima sections mapped: Buitinė chemija → Namų priežiūra, Prekės gyvūnams → Gyvūnams, Konditerija → Duona ir
+  kepiniai. "Only in some shops" notes are kept with the offer.
+- Panel serves 8 requests at a time (pictures load faster, no "Task queue depth" warnings).
+
 ## 0.4.1
 - IKI: only leaflets are collected – the policy PDFs linked in the iki.lt footer were taken for leaflets and are
   removed from the database on update. The leaflet title and dates now come from the page
