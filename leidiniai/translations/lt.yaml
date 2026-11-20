@@ -22,3 +22,12 @@ configuration:
     description: Senesnės nuotraukų iškarpos ištrinamos (pasiūlymai ir kainos lieka).
   log_level:
     name: Žurnalo lygis
+  picture_reader:
+    name: Paveikslėlių skaitytuvas
+    description: "Skaito tik paveikslėliais išleistus leidinius (Šilas, kai kurie Rimi katalogai). none – jie laukia; tesseract – lengvas vietinis OCR (~25 MB, stilizuotų kainų neperskaito); ollama – vaizdo modelis Qwen2.5-VL (geriausias; šioje mašinoje ~6 GB disko ir ~8–10 GB RAM skaitant naktį, arba kitame kompiuteryje per Ollama URL). Pasirinkus atsisiunčiama, ko reikia, pakeitus – ištrinama."
+  ollama_url:
+    name: Ollama URL (nebūtina)
+    description: "Ollama kitame kompiuteryje, pvz. http://192.168.1.20:11434. Modelis ten jau turi būti atsisiųstas (ollama pull qwen2.5vl:7b). Tuščia – Ollama įdiegiamas ir paleidžiamas šioje mašinoje."
+  ollama_model:
+    name: Ollama modelis
+    description: Vaizdo modelio pavadinimas, pvz. qwen2.5vl:7b (numatytas) arba qwen2.5vl:3b (mažesnis, ~3 GB, daugiau klaidų).

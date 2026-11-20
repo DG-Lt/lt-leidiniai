@@ -20,8 +20,12 @@ def status():
     logo_rows = [{"chain": c, "name": n, "user": bool(logos.find(s, c, "user")), "auto": bool(logos.find(s, c, "auto")),
                   "url": url_for("offers.logo", chain=c, v=int(logos.find(s, c).stat().st_mtime)) if logos.find(s, c) else None}
                  for c, n in CHAIN_NAMES.items()]
+    from .. import vision
+    reader = vision.read_status(s)
+    if s.picture_reader == "none":
+        reader = {"state": "off", "message": "išjungtas (parinktis picture_reader)"}
     return render_template("status.html", options=s.public(), log_tail=logs.tail(s, 150), mqtt=mqtt,
-                           run_files=len(logs.run_summary_files(s)), logo_rows=logo_rows)
+                           run_files=len(logs.run_summary_files(s)), logo_rows=logo_rows, reader=reader)
 
 
 @bp.post("/logotipai/<chain>")
@@ -78,7 +82,7 @@ STATUS_LT = {"new": "naujas", "downloaded": "atsisiųstas", "parsed": "apdorotas
 @bp.get("/leidiniai")
 def leaflets():
     from datetime import date
-    from .. import db
+    from .. import db, vision
     from ..schedule import due
     s = settings()
     runner = current_app.config.get("RUNNER")
@@ -87,7 +91,7 @@ def leaflets():
         nxt = runner.next_checks() if runner else {}
         for c in s.chains:
             st = conn.execute("SELECT * FROM chain_state WHERE chain=?", (c,)).fetchone()
-            is_due, reason, _ = due(conn, c, date.today())
+            is_due, reason, _ = due(conn, c, date.today(), vision.ready(s))
             chains.append({"chain": c, "state": st, "due": is_due, "reason": reason, "next": nxt.get(c)})
         issues = conn.execute("SELECT * FROM issues ORDER BY COALESCE(valid_to,'9999') DESC, id DESC LIMIT 200").fetchall()
         runs = conn.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 30").fetchall()

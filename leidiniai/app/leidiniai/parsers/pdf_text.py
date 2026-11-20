@@ -284,7 +284,11 @@ def _noise(cfg: ChainCfg):
 
 
 def parse_page(page, pno: int, chain: str, cfg: ChainCfg) -> list[Offer]:
-    ws = page_words(page)
+    return parse_words(page_words(page), page_images(page), pno, chain, cfg)
+
+
+def parse_words(ws: list[dict], imgs: list[dict], pno: int, chain: str, cfg: ChainCfg) -> list[Offer]:
+    """Words {text, x0, x1, top, bottom, size, i} (PDF text layer or OCR, in points) → offers."""
     unit_ids = unit_token_ids(ws)
     disc, du = discount_tokens(ws, cfg.disc_min)
     prices, pu = money_tokens(ws, cfg.price_min, 400, du | unit_ids)
@@ -323,7 +327,6 @@ def parse_page(page, pno: int, chain: str, cfg: ChainCfg) -> list[Offer]:
 
     noise = _noise(cfg)
     code_rx = re.compile(cfg.code_rx) if cfg.code_rx else None
-    imgs = page_images(page)
     centres = [((a["x0"] + a["x1"]) / 2, (a["top"] + a["bottom"]) / 2) for a in anchors]
     out = []
     for i, a in enumerate(anchors):

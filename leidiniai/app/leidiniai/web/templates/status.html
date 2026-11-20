@@ -6,6 +6,7 @@
 <table>
   <tr><th>Versija</th><td>{{ version }}</td></tr>
   <tr><th>MQTT (Home Assistant)</th><td class="{{ 'ok' if mqtt == 'prisijungta' else 'warn' }}">{{ mqtt }}</td></tr>
+  <tr><th>Paveikslėlių skaitytuvas</th><td class="{{ 'ok' if reader.state == 'ready' else 'err' if reader.state == 'error' else 'warn' if reader.state == 'preparing' else '' }}">{{ reader.message or reader.state or '–' }}</td></tr>
   {% for k, v in options.items() %}<tr><th>{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}
 </table>
 </div>

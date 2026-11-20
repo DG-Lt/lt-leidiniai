@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0
+- **Picture reader for image-only leaflets** (Šilas, Rimi catalogues printed as pictures). New option
+  `picture_reader`: `none` (as before, they wait), `tesseract` (light local OCR, ~25 MB) or `ollama` (vision
+  model Qwen2.5-VL – on this box, or on another computer with `ollama_url`; `ollama_model` picks the model).
+  Choosing one downloads what it needs in the background; switching away deletes it. Its state is on **Būsena**.
+  Leaflets that waited ("laukia skaitytuvo") are read at the next night check once the reader is ready. See the
+  Documentation tab for sizes and setup.
+- The logs ZIP also holds the picture reader state and the Ollama server log.
+
 ## 0.5.2
 - **Rimi alcohol catalogue Nr. 23 is read now.** 0.4.6 had filed it as "laukia skaitytuvo" (pictures only), so the
   viewer's PDF button of 0.5.1 never ran for it. Such Rimi leaflets are downloaded once more at the next Rimi
