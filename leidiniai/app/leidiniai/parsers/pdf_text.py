@@ -50,7 +50,9 @@ CFG: dict[str, ChainCfg] = {
     "iki": ChainCfg(price_min=25, old_min=9, old_max=16, disc_min=40, text_max=13.5, maxd=280, near=60, above_penalty=10.0,
                     card_words=("kortel",),
                     noise=(r"^Ir IKI EXPRESS$", r"^IKI EXPRESS$", r"^PIRKITE", r"^PIRKTI$", r"lastmile\.lt",
-                           r"^Įprasta kaina$", r"^Supakuota$", r"^SUTAUPOTE$")),
+                           r"^Įprasta kaina$", r"^Supakuota$", r"^SUTAUPOTE$",
+                           r"^Pasiūlymas galioja", r"^Nuolaida suteikiama tik", r"^pažymėtoms prekėms\.?$",
+                           r"^prekėms\.?$", r"^SUPERKAINA$")),
 }
 
 COMMON_NOISE = (
@@ -59,6 +61,14 @@ COMMON_NOISE = (
 )
 
 BEHIND_OFFSET = 25.0
+# leaflet-wide terms printed inside an offer box – never part of the product name
+PROMO_RX = re.compile(
+    r"Pasiūlymas\s+galioja(?:\s+(?:nuo|iki)\s+(?:20\d\d[\s.\-]+\d{1,2}[\s.\-]+\d{1,2}|\d{1,2}[\s.\-]+\d{1,2}))+\s*\.?"
+    r"|Nuolaida\s+suteikiama\s+tik\s+pažymėtoms\s+prekėms\s*\.?"
+    r"|\b(?:SUPERKAINA|ANIAKREPUS)\b", re.I)
+# ≥4 single letters in a row: a vertical badge ('SUPERKAINA' stacked or rotated) read letter by letter
+_UP = "A-ZĄČĘĖĮŠŲŪŽ"
+LETTER_RUN = re.compile(rf"(?:(?<=\s)|^)(?:[{_UP}]\s+){{3,}}[{_UP}](?=\s|$)")
 SPACED = re.compile(r"(?:(?<=\s)|^)(?:[^\W\d_]\s+){2,}[^\W\d_](?=\s|$)")
 PRICE_TOKEN = re.compile(r"^\d{1,3}(,\d\d)?$")
 UNIT_AFTER = re.compile(r"^(€|Eur)?\s*/\s*(kg|l|vnt|m|kompl|pak|rit)\.?\*?$|^(€|Eur)/(kg|l|vnt|m|pak|rit)\.?\*?$", re.I)
@@ -337,8 +347,10 @@ def parse_page(page, pno: int, chain: str, cfg: ChainCfg) -> list[Offer]:
             toks = t2.split()
             if len(toks) >= 4 and sum(len(x) == 1 for x in toks) >= 0.6 * len(toks):
                 continue  # letters spread out (rotated or tracked text)
+            if re.fullmatch(r"[^\W\d_]", t2):
+                continue  # a lone letter: one line of vertical lettering
             name_lines.append(t2)
-        name = " ".join(name_lines)
+        name = clean_name(" ".join(name_lines))
         o = Offer(chain=chain, name=name, kind=a["kind"], page=pno)
         if a["kind"] == "price":
             o.price = a["value"]
@@ -381,6 +393,14 @@ def parse_page(page, pno: int, chain: str, cfg: ChainCfg) -> list[Offer]:
         o.extra["lines"] = all_lines
         out.append(finish(o))
     return merge_single_prices(out)
+
+
+def clean_name(name: str) -> str:
+    """Joined name lines → name: drop promo sentences and runs of single letters that come from several lines
+    of vertical lettering ('… 500 ml A K I E P R U S')."""
+    name = PROMO_RX.sub(" ", name)
+    name = LETTER_RUN.sub(" ", name)
+    return re.sub(r"\s+", " ", name).strip(" ,;.")
 
 
 def merge_single_prices(offers: list[Offer]) -> list[Offer]:

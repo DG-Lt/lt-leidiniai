@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.2
+- **Rimi alcohol catalogue Nr. 23 is read now.** 0.4.6 had filed it as "laukia skaitytuvo" (pictures only), so the
+  viewer's PDF button of 0.5.1 never ran for it. Such Rimi leaflets are downloaded once more at the next Rimi
+  check (which now also happens whenever a leaflet waits to be downloaded). The parser learnt while downloading
+  (catalogue) is no longer forgotten when the listing is read again.
+- IKI names: the vertical **SUPERKAINA** badge read letter by letter ("… 1 l A K I E P R U S") and the
+  promotion sentence ("Pasiūlymas galioja iki … Nuolaida suteikiama tik pažymėtoms prekėms.") are left out.
+  Already stored IKI leaflets keep their names until the next issue.
+
 ## 0.5.1
 - **Rimi alcohol assortment catalogue**: catalogues without product links now get their PDF from the viewer's
   "Atsiųsti PDF rinkmeną" button (headless browser). If it prints prices, every item is listed with its regular

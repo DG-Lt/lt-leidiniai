@@ -138,6 +138,13 @@ MIGRATIONS: list[str] = [
         valid_to   = COALESCE(valid_to,   (SELECT i.valid_to   FROM issues i WHERE i.id = offers.issue_id))
     WHERE valid_from IS NULL OR valid_to IS NULL;
     """,
+    # 5 (0.5.2): Rimi leaflets filed as images-only before the viewer's PDF button was tried (0.4.6): download
+    # them again, so the PDF button and the catalogue parser run (alcohol assortment catalogue Nr. 23)
+    """
+    UPDATE issues SET status='new', attempts=0, parse_attempts=0, error=NULL
+    WHERE chain='rimi' AND status='waiting_parser' AND json_extract(meta, '$.parser') IS NULL
+        AND (valid_to IS NULL OR valid_to >= date('now'));
+    """,
 ]
 
 
