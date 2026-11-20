@@ -5,9 +5,10 @@ from .base import FileRef, Fetcher, IssueInfo
 
 
 def get(chain: str) -> type[Fetcher]:
-    from . import iki, lidl, maxima, norfa, rimi, silas
+    from . import iki, lidl, maxima, norfa, rimi, silas, vynoteka
     return {"iki": iki.Iki, "lidl": lidl.Lidl, "maxima": maxima.Maxima, "norfa": norfa.Norfa,
-            "rimi": rimi.Rimi, "silas": silas.Silas}[chain]
+            "rimi": rimi.Rimi, "silas": silas.Silas,
+            "vynoteka": vynoteka.Vynoteka}[chain]
 
 
 __all__ = ["FileRef", "Fetcher", "IssueInfo", "get"]

@@ -81,6 +81,7 @@ SHOP_MAP: dict[tuple[str, str], tuple[str, str]] = {
     ("rimi", "SH-20"): ("sweets", "strong"),
     ("rimi", "SH-77"): ("dairy", "weak"),
     ("rimi", "Alkoholio katalogas"): ("alcohol", "weak"),  # catalogue_pdf: the assortment catalogue
+    ("vynoteka", "Kalėdiniai rinkiniai"): ("alcohol", "weak"),  # gift sets: drinks + snacks
 }
 
 # Plain-letter stems, matched at the start of a word of the folded name (multi-word stems as a phrase).

@@ -41,7 +41,7 @@ pre.log { white-space:pre-wrap; font-size:.8rem; background:var(--card); border:
 .offer.watched { border-color:#fbc02d; }
 .chain { font-size:.75rem; font-weight:600; padding:.05rem .4rem; border-radius:4px; background:var(--line); }
 .c-iki { background:#ffeb3b; color:#000; } .c-lidl { background:#0050aa; color:#fff; } .c-maxima { background:#e30613; color:#fff; }
-.c-norfa { background:#d32f2f; color:#fff; } .c-rimi { background:#e2001a; color:#fff; } .c-silas { background:#2e7d32; color:#fff; }
+.c-norfa { background:#d32f2f; color:#fff; } .c-rimi { background:#e2001a; color:#fff; } .c-silas { background:#2e7d32; color:#fff; } .c-vynoteka { background:#8b1e3f; color:#fff; }
 .badge.watch { background:#fbc02d; color:#000; }
 .small { font-size:.8rem; }
 label.check { flex-direction:row; align-items:center; gap:.3rem; color:var(--fg); }

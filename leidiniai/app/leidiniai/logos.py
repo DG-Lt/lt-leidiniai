@@ -20,6 +20,7 @@ SOURCES = {
     "norfa": "https://www.norfa.lt/assets/Uploads/Images/Norfa-logo.svg",
     "rimi": "https://www.rimi.lt/apple-touch-icon.png",
     "silas": "https://www.silas.lt/wp-content/themes/SILAS_Responsive/favicons/apple-touch-icon-152x152.png",
+    "vynoteka": "https://vynoteka.lt/build/assets/images/vynoteka.svg",
 }
 EXT = (".png", ".svg", ".webp", ".jpg")
 MAX_BYTES = 512 * 1024

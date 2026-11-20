@@ -1,8 +1,8 @@
 """Leidiniai – Lithuanian discount leaflets collector (Home Assistant app)."""
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 
-CHAINS = ("iki", "lidl", "maxima", "norfa", "rimi", "silas")
+CHAINS = ("iki", "lidl", "maxima", "norfa", "rimi", "silas", "vynoteka")
 
 CHAIN_NAMES = {
     "iki": "IKI",
@@ -11,4 +11,5 @@ CHAIN_NAMES = {
     "norfa": "Norfa",
     "rimi": "Rimi",
     "silas": "Šilas",
+    "vynoteka": "Vynoteka",
 }

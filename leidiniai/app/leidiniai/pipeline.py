@@ -32,7 +32,7 @@ def after_download(conn, settings, issue_id, info, summary, log) -> None:
 
 
 def parser_of(chain: str) -> str:
-    return {"maxima": "maxima", "rimi": "rimi", "silas": "vision"}.get(chain, "pdf")
+    return {"maxima": "maxima", "rimi": "rimi", "silas": "vision", "vynoteka": "vynoteka"}.get(chain, "pdf")
 
 
 def parse_stored(conn, settings, issue_id: int, parser: str | None, summary: dict, log) -> bool:
@@ -70,7 +70,7 @@ def parse_stored(conn, settings, issue_id: int, parser: str | None, summary: dic
         else:
             offers = parse_issue(chain, parser, files, meta, ref, log)
         t_parse = time.monotonic() - t0
-        if parser in ("pdf", "catalogue_pdf"):
+        if parser in ("pdf", "catalogue_pdf", "vynoteka"):
             images = render_issue_crops(settings, issue, files, offers, log)
         counts = store.save_offers(conn, issue, offers, images)
         with conn:
@@ -82,7 +82,7 @@ def parse_stored(conn, settings, issue_id: int, parser: str | None, summary: dic
         log.info("%s %s: %d offer(s) (%d named, %d priced, %d image(s)) in %.0f s; flags %s",
                  chain, issue["key"], counts["offers"], counts["named"], counts["priced"], len(images),
                  entry["seconds"], counts["flags"] or "–")
-        if not offers and parser in ("pdf", "catalogue_pdf") and not _has_prices(files):
+        if not offers and parser in ("pdf", "catalogue_pdf", "vynoteka") and not _has_prices(files):
             # award / assortment catalogues without a single price (Lithuania bans alcohol advertising): not a fault
             log.info("%s %s: no prices printed in this leaflet (catalogue) – nothing to list", chain, issue["key"])
         elif not offers:

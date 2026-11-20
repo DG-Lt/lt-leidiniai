@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0
+- **New chain: Vynoteka** (https://vynoteka.lt/). **Already installed? Tick `vynoteka` under Chains in the
+  Configuration tab** – an existing chain list is not changed by an update.
+  - *Maisto leidinys* (PDF): offers with price, old price, discount ("-30" badges), "TIK" prices.
+  - *Gėrimų leidinys*: pages of pictures only (~22) – read by the picture reader (`picture_reader`); with
+    `none` it waits.
+  - *Kalėdinių rinkinių katalogas*: every gift set with its price and contents, marked **katalogas**.
+  - The winter catalogue is a video – skipped. Logo from the shop's site, own colour in the panel.
+- Vynoteka gift sets count as alcohol unless the name says otherwise.
+
 ## 0.6.0
 - **Picture reader for image-only leaflets** (Šilas, Rimi catalogues printed as pictures). New option
   `picture_reader`: `none` (as before, they wait), `tesseract` (light local OCR, ~25 MB) or `ollama` (vision
