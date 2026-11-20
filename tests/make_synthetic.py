@@ -69,7 +69,7 @@ def maxima_html(path: Path) -> None:
     for n, (name, cat, sec, e, ct, old, disc, unit, card) in enumerate(items, 1):
         icon = '<span class="offer-price-tag__icon"><img alt="Tik su AČIŪ kortele" src="x.png"></span>' if card else ""
         sections.setdefault(sec, []).append(f"""
-<div data-controller="offerCard" data-offercard-offer-id="0000000{n}-5e7a-4c1d-9b2e-synthetic{n:04d}" data-categories-multiple="{cat}">
+<div data-controller="offerCard" data-offerCard-offer-id="0000000{n}-5e7a-4c1d-9b2e-synthetic{n:04d}" data-categories-multiple="{cat}">
   <img src="https://offers.maxima.lt/media/MarketingOffer/synthetic{n}.png" alt="{name}">
   <h4 class="offer-card__title">{name}</h4>
   <div class="offer-price-tag">{icon}

@@ -17,7 +17,8 @@ class Maxima(Fetcher):
     def discover(self):
         html = self.http.text(self.listing_url, need=r'data-controller="offerCard"',
                               wait_for='[data-controller="offerCard"]')
-        ids = sorted(set(re.findall(r'data-offercard-offer-id="([^"]+)"', html)))  # numbers until 2026-11, now UUIDs
+        # raw HTML writes data-offerCard-offer-id (mixed case; BeautifulSoup lower-cases it); numbers until 2026-11, now UUIDs
+        ids = sorted(set(re.findall(r'data-offercard-offer-id\s*=\s*["\']([^"\']+)', html, re.I)))
         if not ids:
             n = html.count('data-controller="offerCard"')
             self.log.warning("Maxima: no offer cards found (%d offerCard elements without an offer id; %d bytes)",
