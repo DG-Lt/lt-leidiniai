@@ -52,7 +52,8 @@ class Rimi(Fetcher):
             except Exception as e:
                 self.log.warning("Rimi enrichments not JSON (%s): %s", e, c["url"])
         if not enr:
-            raise RuntimeError("Rimi: no iPaper hotspots captured (page layout changed?)")
+            # some catalogues (alcohol Nr. 23, 2026-11) have no product links at all: pictures only, like Šilas
+            return self._images_only(issue, folder, "no product links (hotspots) in this leaflet")
         spots = [{"p": e.get("pageIndex"), "x": e.get("x"), "y": e.get("y"), "w": e.get("width"),
                   "h": e.get("height"), "url": e.get("url"), "type": e.get("type")} for e in enr]
         queries = []
@@ -60,6 +61,8 @@ class Rimi(Fetcher):
             q = parse_qs(urlparse(s["url"] or "").query).get("query", [None])[0]
             if q and q not in queries:
                 queries.append(q)
+        if not queries:
+            return self._images_only(issue, folder, f"{len(spots)} hotspot(s), none links to the e-shop")
         cache = self.__dict__.setdefault("_eshop_cache", {})  # same query in two leaflets of one check: ask once
         todo = [q for q in queries if q not in cache]
         delay = getattr(self.http, "delay", 0) or 0
@@ -95,5 +98,15 @@ class Rimi(Fetcher):
             "enrichments.json": json.dumps({"source": issue.source_url, "enrichments": spots}, ensure_ascii=False).encode(),
             "eshop.json": json.dumps(shop, ensure_ascii=False).encode(),
         }
+        issue.files = []
+        return super().download(issue, folder)
+
+    def _images_only(self, issue, folder, why: str):
+        """Nothing to look up: keep the leaflet as images-only – it waits for the picture reader (vision step)
+        instead of failing every night."""
+        self.log.info("Rimi %s: %s → images only, waits for the picture reader", issue.key, why)
+        issue.parser = "vision"
+        issue.prefetched = {"enrichments.json": json.dumps({"source": issue.source_url, "enrichments": [],
+                                                            "note": why}, ensure_ascii=False).encode()}
         issue.files = []
         return super().download(issue, folder)
