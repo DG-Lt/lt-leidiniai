@@ -115,6 +115,9 @@ def run(chain: str, trigger: str, settings) -> dict:
         log.error("%s: check failed: %s", chain, e)
         log.debug(traceback.format_exc())
     finally:
+        if status != "error":
+            from . import logos
+            logos.refresh(settings, chain, http, log)
         http.close()
     try:
         summary["cleanup"] = pipeline.housekeep(conn, settings, log)

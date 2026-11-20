@@ -258,3 +258,70 @@ def test_real_paho_client_api():
     assert c._callback_api_version == paho.CallbackAPIVersion.VERSION2
     b = mqtt.Bridge.__new__(mqtt.Bridge)
     c.on_connect, c.on_message, c.on_disconnect = b._on_connect, b._on_message, b._on_disconnect
+
+
+# ---------------------------------------------------------------- 0.4.5: logos, "Stebimi viršuje"
+
+PNG_1PX = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+                        "1f15c4890000000d49444154789c6360f8cfc0f01f0005000201a8d6b1d40000000049454e44ae426082")
+
+
+def test_logos_kind_upload_and_refresh(settings, tmp_path, monkeypatch):
+    import logging
+    from types import SimpleNamespace
+    from leidiniai import logos
+    monkeypatch.setattr(logos, "SOURCES", {"iki": "https://example.invalid/logo.png"})
+    assert logos.kind_of(PNG_1PX) == ".png" and logos.kind_of(b"<svg xmlns='x'></svg>") == ".svg"
+    assert logos.kind_of(b"<html>not a logo</html>") is None
+    assert logos.find(settings, "iki") is None
+
+    class H:
+        calls = 0
+
+        def _get(self, url):
+            H.calls += 1
+            return SimpleNamespace(status_code=200, content=PNG_1PX)
+
+    logos.refresh(settings, "iki", H(), logging.getLogger("t"))
+    assert logos.find(settings, "iki").name == "auto-iki.png" and H.calls == 1
+    logos.refresh(settings, "iki", H(), logging.getLogger("t"))  # fresh: no second request
+    assert H.calls == 1
+    logos.save_upload(settings, "iki", b"<svg xmlns='http://www.w3.org/2000/svg'/>")
+    assert logos.find(settings, "iki").name == "user-iki.svg"
+    import pytest
+    with pytest.raises(ValueError):
+        logos.save_upload(settings, "iki", b"MZ\x90\x00 not an image")
+    logos.remove_upload(settings, "iki")
+    assert logos.find(settings, "iki").name == "auto-iki.png"
+
+
+def test_panel_logo_and_watched_first(settings):
+    import io
+    from leidiniai import db, logos
+    from leidiniai.web import create_app
+    conn = db.open_db(settings)
+    with conn:
+        iid = conn.execute("INSERT INTO issues(chain,key,series,title,status,first_seen,last_seen,valid_to)"
+                           " VALUES('norfa','1','s','t','parsed','t','t','2099-01-01')").lastrowid
+        for seq, (name, disc) in enumerate([("Bananai 1 kg", 50), ("Sviestas ŪKIO 200 g", 10), ("Obuoliai 1 kg", 30)]):
+            pid = conn.execute("INSERT INTO products(chain,ident,name,name_key,first_seen,last_seen) VALUES('norfa',?,?,?,'t','t')",
+                               (name, name, name.lower().replace("ū", "u"))).lastrowid
+            conn.execute("INSERT INTO offers(issue_id,product_id,chain,seq,kind,name,name_key,price,discount_pct,category,flags,extra)"
+                         " VALUES(?,?,?,?,'price',?,?,?,?,?,?,?)",
+                         (iid, pid, "norfa", seq, name, name.lower().replace("ū", "u"), 100, disc, "other", "[]", "{}"))
+    c = create_app(settings).test_client()
+    c.post("/stebimi", data={"term": "sviest"})
+    names = lambda html: [n for n in ("Bananai", "Sviestas", "Obuoliai") if n in html]
+    order = lambda html: sorted(names(html), key=html.index)
+    assert order(c.get("/?sort=disc").get_data(as_text=True)) == ["Bananai", "Obuoliai", "Sviestas"]
+    assert order(c.get("/?sort=disc&top=1").get_data(as_text=True)) == ["Sviestas", "Bananai", "Obuoliai"]
+    assert order(c.get("/?sort=disc&top=1&q=obuol").get_data(as_text=True)) == ["Obuoliai"]  # filters still apply
+    # logo: upload on Būsena, shown on the card, served with a safe CSP
+    assert 'class="logo"' not in c.get("/").get_data(as_text=True)
+    r = c.post("/logotipai/norfa", data={"file": (io.BytesIO(PNG_1PX), "n.png")}, content_type="multipart/form-data")
+    assert r.status_code == 302 and logos.find(settings, "norfa")
+    assert 'img class="logo" src="/logo/norfa"' in c.get("/").get_data(as_text=True)
+    r = c.get("/logo/norfa")
+    assert r.mimetype == "image/png" and "default-src 'none'" in r.headers["Content-Security-Policy"]
+    assert c.get("/logo/nope").status_code == 404
+    assert "Tinklų logotipai" in c.get("/busena").get_data(as_text=True)

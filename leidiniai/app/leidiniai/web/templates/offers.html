@@ -13,6 +13,7 @@
   <label>Rikiuoti <select name="sort">{% for k, n in SORT_LT.items() %}<option value="{{ k }}" {{ 'selected' if f.sort == k }}>{{ n }}</option>{% endfor %}</select></label>
   <label class="check"><input type="checkbox" name="disc" value="1" {{ 'checked' if f.disc }}> tik su nuolaida</label>
   <label class="check"><input type="checkbox" name="nocard" value="1" {{ 'checked' if f.nocard }}> be kortelės</label>
+  <label class="check" title="Stebimų sąrašo pasiūlymai – sąrašo pradžioje (kiti filtrai galioja)"><input type="checkbox" name="top" value="1" {{ 'checked' if f.top }}> Stebimi viršuje</label>
   <button>Rodyti</button>
 </form>
 {% if not offers %}

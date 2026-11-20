@@ -5,7 +5,7 @@
     {% set src = image_url(o.image) %}
     {% if src %}<img src="{{ src }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% else %}<div class="noimg">be nuotraukos</div>{% endif %}
   </a>
-  <div class="meta"><span class="chain c-{{ o.chain }}">{{ CHAIN_NAMES[o.chain] }}</span>
+  <div class="meta">{% set lg = logo_url(o.chain) %}{% if lg %}<img class="logo" src="{{ lg }}" alt="{{ CHAIN_NAMES[o.chain] }}" title="{{ CHAIN_NAMES[o.chain] }}">{% else %}<span class="chain c-{{ o.chain }}">{{ CHAIN_NAMES[o.chain] }}</span>{% endif %}
     {% if o.discount_text or o.discount_pct %}<span class="badge disc">{{ o.discount_text or ('-' ~ o.discount_pct ~ '%') }}</span>{% endif %}
     {% if o.card %}<span class="badge card" title="{{ o.card_text or '' }}">kortelė</span>{% endif %}
     {% if watched %}<span class="badge watch" title="Stebima">★</span>{% endif %}

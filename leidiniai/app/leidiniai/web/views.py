@@ -1,7 +1,7 @@
 """Panel pages."""
 from __future__ import annotations
 
-from flask import Blueprint, current_app, render_template
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 
 bp = Blueprint("ui", __name__)
 
@@ -16,8 +16,34 @@ def status():
     s = settings()
     m = current_app.config.get("MQTT")
     mqtt = "prisijungta" if m and m.connected else "neprisijungta" if m else "išjungta"
+    from .. import CHAIN_NAMES, logos
+    logo_rows = [{"chain": c, "name": n, "user": bool(logos.find(s, c, "user")), "auto": bool(logos.find(s, c, "auto")),
+                  "url": url_for("offers.logo", chain=c) if logos.find(s, c) else None}
+                 for c, n in CHAIN_NAMES.items()]
     return render_template("status.html", options=s.public(), log_tail=logs.tail(s, 150), mqtt=mqtt,
-                           run_files=len(logs.run_summary_files(s)))
+                           run_files=len(logs.run_summary_files(s)), logo_rows=logo_rows)
+
+
+@bp.post("/logotipai/<chain>")
+def logo_upload(chain):
+    """Būsena → Tinklų logotipai: the user's own logo file for a chain (wins over the downloaded one)."""
+    from .. import CHAIN_NAMES, logos
+    if chain not in CHAIN_NAMES:
+        return "", 404
+    if request.form.get("remove"):
+        logos.remove_upload(settings(), chain)
+        flash(f"{CHAIN_NAMES[chain]}: įkeltas logotipas pašalintas.")
+    else:
+        f = request.files.get("file")
+        data = f.read(logos.MAX_BYTES + 1) if f else b""
+        try:
+            if not data:
+                raise ValueError("nepasirinktas failas")
+            logos.save_upload(settings(), chain, data)
+            flash(f"{CHAIN_NAMES[chain]}: logotipas įkeltas.")
+        except ValueError as e:
+            flash(f"{CHAIN_NAMES[chain]}: {e}.")
+    return redirect(url_for("ui.status") + "#logotipai")
 
 
 @bp.get("/zurnalai.zip")
