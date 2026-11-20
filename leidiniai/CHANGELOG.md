@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.1
+- **Rimi alcohol assortment catalogue**: catalogues without product links now get their PDF from the viewer's
+  "Atsiųsti PDF rinkmeną" button (headless browser). If it prints prices, every item is listed with its regular
+  price, volume, price per litre and picture, marked **katalogas** (no discount – these are not promotions;
+  hidden when "tik su nuolaida" is ticked). Nr. 23 gives 70 items, valid 2026-11-17 – 11-30. The one that waited
+  is picked up at the next Rimi check.
+- Logos: a newly uploaded logo shows at once (the browser kept the old picture for up to an hour).
+- Categories: brand names printed in capitals no longer decide the category ("Alus GENYS BALTAS MELAS" is beer,
+  not blueberries; "CONO SUR" wine is not a ready meal); "spiritinis gėrimas" is alcohol.
+
 ## 0.5.0
 - **Categories learn from the shops and from you.** Maxima and Rimi sort every offer into their own categories,
   and your corrections count three times as much: a product now gets the category of the most similar of those

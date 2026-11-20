@@ -80,6 +80,7 @@ SHOP_MAP: dict[tuple[str, str], tuple[str, str]] = {
     ("rimi", "SH-19"): ("pantry", "weak"),
     ("rimi", "SH-20"): ("sweets", "strong"),
     ("rimi", "SH-77"): ("dairy", "weak"),
+    ("rimi", "Alkoholio katalogas"): ("alcohol", "weak"),  # catalogue_pdf: the assortment catalogue
 }
 
 # Plain-letter stems, matched at the start of a word of the folded name (multi-word stems as a phrase).
@@ -99,7 +100,7 @@ _KW = {
         parmez cedar kiausin kiausiniai pasukos ayran skyr fermentin mascarpone""",
     "bakery": """duon batonas baton bandel kepal ragelis rageliai pyrag keksas kekso bagete croissant kruasan
         sumustin tortilij lavas pita spurgos spurga""",
-    "ready_meals": """salotos su picos pica cepelin koldun virtin blyn lietin kotlet kibin sriuba sriubos
+    "ready_meals": """salotos picos pica cepelin koldun virtin blyn lietin kotlet kibin sriuba sriubos
         paruost kulinar""",
     "frozen": """saldyt uzsaldyt ledai ledu greitai uzsaldytos""",
     "pantry": """sirup dziuvesel dziuvesel migdol dziovint uztepel misrain panko miltai milt cukrus cukr druska ryziai ryzi makaron spaget grikiai kruop avizin dribsn
@@ -111,7 +112,7 @@ _KW = {
     "drinks": """gira giros vanduo vandens sultys sulciu gaivus gazuot negazuot limonad energin izotonin nektar glotnut
         kokteil nealk nealkohol gerimas gerimai kola cola""",
     "alcohol": """alus alaus vynas vyno putojant degtin brendis viskis konjak romas dzinas likeris sidras
-        trauktin sampan prosecco""",
+        trauktin sampan prosecco spiritinis tekila tekilos dzino brendzio witbier lager""",
     "baby": """kudik vaik sauskel tyrele tyrel misinys misinio pieno misin konstrukt lego zaisl""",
     "pets": """sun sunims sunu kac kacu katems kat kraikas edal pasar gyvun""",
     "household": """skalb plovikl indu valikl valymo tualet popier ranksluost servetel siuksl maisai
@@ -137,6 +138,7 @@ SEED_KEYWORDS.update({
     "pedu krem": "hygiene", "dienos krem": "hygiene", "nakties krem": "hygiene", "saules krem": "hygiene",
     "apsauginis krem": "hygiene", "kremas rank": "hygiene", "kremas veid": "hygiene", "kremas kun": "hygiene",
     "kremas ped": "hygiene", "skalbimo kaps": "household", "indaplov": "household",
+    "spiritinis gerimas": "alcohol", "putojanti arbata": "drinks",
 })
 
 
@@ -298,14 +300,18 @@ class Classifier:
 
     @staticmethod
     def _words(text: str) -> tuple[list[str], set[int]]:
-        """Folded words + positions of genitive-plural words (printed ending -ų/-ių): those describe."""
+        """Folded words + positions of words that only describe: genitive plural (printed ending -ų/-ių) and
+        brand names printed in capitals ("Alus GENYS BALTAS MELAS" – MELAS is not "mėlynės"), unless the
+        whole name is in capitals."""
+        raws = [r for r in re.split(r"[^\w%+]+", text or "") if r]
+        all_caps = all(r.isupper() or not r.isalpha() for r in raws)
         words, desc = [], set()
-        for raw in re.split(r"[^\w%+]+", text or ""):
+        for raw in raws:
             f = fold(raw)
             if not f:
                 continue
             for part in f.split():
-                if raw.lower().endswith("ų") and len(raw) > 3:
+                if (raw.lower().endswith("ų") and len(raw) > 3) or (not all_caps and len(raw) >= 3 and raw.isupper()):
                     desc.add(len(words))
                 words.append(part)
         return words, desc

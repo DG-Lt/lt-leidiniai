@@ -151,7 +151,9 @@ def extra_of(row) -> dict:
 
 def logo_url(chain: str) -> str | None:
     from .. import logos
-    return url_for("offers.logo", chain=chain) if logos.find(settings(), chain) else None
+    p = logos.find(settings(), chain)
+    # the file's time in the address: a new upload is shown at once instead of the browser's cached copy
+    return url_for("offers.logo", chain=chain, v=int(p.stat().st_mtime)) if p else None
 
 
 def ctx():

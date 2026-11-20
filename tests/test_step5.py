@@ -320,7 +320,7 @@ def test_panel_logo_and_watched_first(settings):
     assert 'class="logo"' not in c.get("/").get_data(as_text=True)
     r = c.post("/logotipai/norfa", data={"file": (io.BytesIO(PNG_1PX), "n.png")}, content_type="multipart/form-data")
     assert r.status_code == 302 and logos.find(settings, "norfa")
-    assert 'img class="logo" src="/logo/norfa"' in c.get("/").get_data(as_text=True)
+    assert 'img class="logo" src="/logo/norfa?v=' in c.get("/").get_data(as_text=True)
     r = c.get("/logo/norfa")
     assert r.mimetype == "image/png" and "default-src 'none'" in r.headers["Content-Security-Policy"]
     assert c.get("/logo/nope").status_code == 404
