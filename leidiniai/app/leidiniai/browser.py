@@ -32,6 +32,7 @@ class Browser:
             f"--renderer-process-limit={max(1, int(settings.threads))}",
         ])
         self._ctx = self._b.new_context(user_agent=UA.replace("lt-leidiniai", "HeadlessChrome lt-leidiniai"),
+                                        accept_downloads=True,
                                         locale="lt-LT", timezone_id="Europe/Vilnius",
                                         viewport={"width": 1280, "height": 1800})
         # images/fonts/media are not needed for reading the page
@@ -77,6 +78,51 @@ class Browser:
             if need is not None and not re.search(need, html):
                 self.log.warning("Expected content still missing after rendering: %s", url)
             return Page(url=page.url, html=html, captured=captured)
+        finally:
+            page.close()
+
+    def download_by_button(self, url: str, button: str, timeout_ms: int = 90000) -> tuple[bytes, str] | None:
+        """Open url, press the button whose accessible name matches `button` (regex) and return the file it
+        downloads (bytes, suggested name) – for viewers that make the PDF link only on click (iPaper
+        "Atsiųsti PDF rinkmeną"). A cookie banner is answered with "only necessary". None if nothing came."""
+        self.before(url)
+        page = self._ctx.new_page()
+        pdf_responses: list = []
+        page.on("response", lambda r: pdf_responses.append(r)
+                if "application/pdf" in (r.headers.get("content-type") or "") else None)
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            try:
+                page.wait_for_load_state("networkidle", timeout=timeout_ms)
+            except Exception:
+                pass
+            for name in (r"tik būtin", r"Naudoti tik", r"Atmesti"):
+                b = page.get_by_role("button", name=re.compile(name, re.I))
+                if b.count():
+                    try:
+                        b.first.click(timeout=3000)
+                        break
+                    except Exception:
+                        pass
+            target = page.get_by_role("button", name=re.compile(button, re.I))
+            if not target.count():
+                self.log.info("No '%s' button on %s", button, url)
+                return None
+            try:
+                with page.expect_download(timeout=timeout_ms) as dl:
+                    target.first.click(timeout=10000)
+                d = dl.value
+                p = d.path()
+                return (open(p, "rb").read(), d.suggested_filename) if p else None
+            except Exception as e:  # some viewers open the PDF instead of downloading it
+                page.wait_for_timeout(3000)
+                for r in pdf_responses:
+                    try:
+                        return r.body(), r.url.rsplit("/", 1)[-1].split("?")[0] or "leidinys.pdf"
+                    except Exception:
+                        continue
+                self.log.info("Button '%s' gave no file on %s (%s)", button, url, e)
+                return None
         finally:
             page.close()
 

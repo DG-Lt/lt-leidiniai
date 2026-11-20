@@ -30,10 +30,13 @@ Python: pdfplumber words with font size + pypdfium2 page renders; BeautifulSoup 
 - To tune: name blocks sometimes merged with a neighbour; crops too generous (include the neighbour's photo); Lidl/Norfa old price on some pages; float rounding.
 
 ## Wine / alcohol catalogues (2026-11-20)
-IKI "apdovanotų vynų ir šampanų kolekcija 2025" (29 p.) and Rimi "2025 m. Lietuvos vyno čempionate apdovanotų vynų katalogas" (25 p.) have a text layer but **no prices** (names, volume, tasting notes; alcohol advertising is banned in LT since 2018). Rimi "Alkoholinių gėrimų asortimento katalogas Nr. 23" shows prices on its pages but has no hotspots; the iPaper viewer has a "Atsiųsti PDF rinkmeną" button (URL made on click) – text layer not checked yet.
+IKI "apdovanotų vynų ir šampanų kolekcija 2025" (29 p.) and Rimi "2025 m. Lietuvos vyno čempionate apdovanotų vynų katalogas" (25 p.) have a text layer but **no prices** (names, volume, tasting notes; alcohol advertising is banned in LT since 2018). Rimi "Alkoholinių gėrimų asortimento katalogas Nr. 23" shows prices on its pages but has no hotspots; the iPaper viewer has a "Atsiųsti PDF rinkmeną" button (URL made on click). **Checked with the PDF (11 pages): text layer with prices** – euros 54 pt + cents 18 pt + "EUR", volume, description 7 pt, name 8 pt (type line + BRAND), "1 l - 39,99 EUR" 6.5 pt, countries as rotated single letters; validity on the cover "2026 11 17-2026 11 30"; page 4 is a poster → `parsers/catalogue_pdf.py`, 70 items.
 
 ## Categorising
 Order (0.5.0): shop's own category (strong map) → keyword the user taught → **similar products** (inverted index over 5-letter stems of products categorised by a shop or the user; weighted Dice ≥ 0.35 with ≥ 2 shared stems; winner ≥ 60 % of the votes and support ≥ 0.9; user corrections weigh 3) → built-in keyword list (genitive-plural words don't decide) → shop's vague category → other. Unlocked products are re-sorted after each check and after each correction. Later: multilingual-e5-small for what is still 'other'.
+
+## Vynoteka (to do)
+https://vynoteka.lt/ – drinks shop with leaflets: "Gėrimų leidinys" (https://vynoteka.lt/gerimu-leidinys-2026-23, "Leidinys online" + "Leidinys PDF" in the LEIDINIAI menu), "Maisto leidinys", "Kalėdinių rinkinių katalogas 2026", "Žiemos katalogas 2026" (checked 2026-11-20; PDF link not yet looked at).
 
 ## Next steps
 1. Tune parsers per chain; add Šilas via Ollama + Qwen2.5-VL.

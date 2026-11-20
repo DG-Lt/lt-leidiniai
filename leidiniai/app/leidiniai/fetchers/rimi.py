@@ -102,8 +102,35 @@ class Rimi(Fetcher):
         return super().download(issue, folder)
 
     def _images_only(self, issue, folder, why: str):
-        """Nothing to look up: keep the leaflet as images-only – it waits for the picture reader (vision step)
-        instead of failing every night."""
+        """Nothing to look up. First try the viewer's own PDF ("Atsiųsti PDF rinkmeną"): the alcohol assortment
+        catalogue has a text layer with prices → catalogue parser. Otherwise keep the leaflet as images-only –
+        it waits for the picture reader (vision step) instead of failing every night."""
+        try:
+            got = self.http.browser.download_by_button(issue.source_url, r"Atsi.sti PDF")
+            self.http.browser_pages += 1
+        except Exception as e:
+            self.log.info("Rimi %s: PDF button not usable: %s", issue.key, e)
+            got = None
+        if got and got[0][:5] == b"%PDF-":
+            data, name = got
+            name = re.sub(r"[^\w.-]+", "_", name or "katalogas.pdf")
+            if not name.lower().endswith(".pdf"):
+                name += ".pdf"
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / name).write_bytes(data)
+            from ..pipeline import _has_prices
+            files = [{"url": issue.source_url, "name": name, "path": str(folder / name),
+                      "sha256": __import__("hashlib").sha256(data).hexdigest(), "bytes": len(data)}]
+            if _has_prices(files):
+                self.log.info("Rimi %s: %s → PDF from the viewer (%d bytes), read as a price catalogue",
+                              issue.key, why, len(data))
+                issue.parser = "catalogue_pdf"
+                issue.meta["parser"] = "catalogue_pdf"
+                return files
+            self.log.info("Rimi %s: the viewer's PDF has no prices (award catalogue) – nothing to list", issue.key)
+            issue.parser = "catalogue_pdf"
+            issue.meta["parser"] = "catalogue_pdf"
+            return files
         self.log.info("Rimi %s: %s → images only, waits for the picture reader", issue.key, why)
         issue.parser = "vision"
         issue.prefetched = {"enrichments.json": json.dumps({"source": issue.source_url, "enrichments": [],

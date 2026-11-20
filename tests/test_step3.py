@@ -412,3 +412,16 @@ def test_corrections_teach_similar_products(settings):
     store.set_category(conn, ids[1], "sweets")
     assert cats()[names[2]] == "sweets"  # learnt from the two corrections, no keyword taught
     assert conn.execute("SELECT category_source FROM products WHERE id=?", (ids[2],)).fetchone()[0] == "similar"
+
+
+def test_catalogue_pdf_parser_on_real_catalogue():
+    """Rimi alcohol catalogue Nr. 23 (local only: LEIDINIAI_CATALOGUE=<pdf>)."""
+    path = os.environ.get("LEIDINIAI_CATALOGUE")
+    if not path:
+        pytest.skip("LEIDINIAI_CATALOGUE not set")
+    from leidiniai.parsers import catalogue_pdf
+    offers = catalogue_pdf.parse(path)
+    assert len(offers) >= 65 and all(o.kind == "catalogue" and o.old_price is None for o in offers)
+    assert offers[0].valid_from == date(2026, 11, 17) and offers[0].valid_to == date(2026, 11, 30)
+    h = by_name(offers, "Konjakas HENNESSY VS")
+    assert (h.price, h.unit_price, h.quantity) == (3899, 5570, "0,7 l")

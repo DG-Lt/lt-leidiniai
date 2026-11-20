@@ -18,7 +18,7 @@ def status():
     mqtt = "prisijungta" if m and m.connected else "neprisijungta" if m else "išjungta"
     from .. import CHAIN_NAMES, logos
     logo_rows = [{"chain": c, "name": n, "user": bool(logos.find(s, c, "user")), "auto": bool(logos.find(s, c, "auto")),
-                  "url": url_for("offers.logo", chain=c) if logos.find(s, c) else None}
+                  "url": url_for("offers.logo", chain=c, v=int(logos.find(s, c).stat().st_mtime)) if logos.find(s, c) else None}
                  for c, n in CHAIN_NAMES.items()]
     return render_template("status.html", options=s.public(), log_tail=logs.tail(s, 150), mqtt=mqtt,
                            run_files=len(logs.run_summary_files(s)), logo_rows=logo_rows)

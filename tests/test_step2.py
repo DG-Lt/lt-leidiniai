@@ -243,3 +243,22 @@ def test_norfa_promotions_page(tmp_path):
     assert e.image_url == "https://www.norfa.lt/assets/Uploads/Offers/Eserys.jpg"
     assert (r.kind, r.discount_pct, r.card, r.name) == \
         ("badge", 30, True, "RIVONA gamintojo virtiems, rūkytiems ir vytintiems mėsos gaminiams")
+
+
+def test_rimi_catalogue_pdf_from_viewer_button(tmp_path):
+    from pathlib import Path
+    """A catalogue without product links whose viewer offers the PDF: read as a price catalogue."""
+    import json
+    import logging
+    from types import SimpleNamespace
+    from leidiniai.fetchers import rimi
+    from leidiniai.fetchers.base import IssueInfo
+    pdf = (Path(__file__).parent / "synthetic" / "norfa_synthetic.pdf").read_bytes()  # has prices ("€")
+    h = SimpleNamespace(delay=0, browser_pages=0, browser=SimpleNamespace(
+        render=lambda *a, **k: SimpleNamespace(captured=[]),
+        download_by_button=lambda url, button: (pdf, "Alkoholinių gėrimų katalogas Nr 23.pdf")))
+    info = IssueInfo(chain="rimi", key="2026/alko/x", series="x", title="x", source_url="https://leidiniai.rimi.lt/x/",
+                     parser="rimi")
+    files = rimi.Rimi(h, logging.getLogger("t"), REF).download(info, tmp_path / "d")
+    assert info.parser == "catalogue_pdf" and info.meta["parser"] == "catalogue_pdf"
+    assert files[0]["name"].endswith(".pdf") and (tmp_path / "d" / files[0]["name"]).exists()

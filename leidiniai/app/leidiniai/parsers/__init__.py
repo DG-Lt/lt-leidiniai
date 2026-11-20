@@ -109,6 +109,15 @@ def parse_issue(chain: str, parser: str, files: list[dict], meta: dict, ref: dat
         htmls = [open(f["path"], encoding="utf-8").read() for f in sorted(files, key=lambda f: f["name"])
                  if f["name"].endswith(".html")]
         return norfa_promos.parse_pages(htmls, ref)
+    if parser == "catalogue_pdf":
+        from . import catalogue_pdf
+        out = []
+        for f in files:
+            if f["name"].lower().endswith(".pdf"):
+                for o in catalogue_pdf.parse(f["path"], log=log):
+                    o.extra["file"] = f["name"]
+                    out.append(o)
+        return out
     if parser == "pdf":
         from . import pdf_text
         out: list[Offer] = []

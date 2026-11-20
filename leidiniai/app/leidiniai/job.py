@@ -90,8 +90,10 @@ def run(chain: str, trigger: str, settings) -> dict:
                 files = f.download(info, folder)
                 st = "downloaded"
                 with conn:
-                    conn.execute("UPDATE issues SET files=?, status=?, downloaded_at=?, error=NULL, attempts=attempts+1 WHERE id=?",
-                                 (json.dumps(files, ensure_ascii=False), st, db.now_iso(), iid))
+                    conn.execute("UPDATE issues SET files=?, status=?, downloaded_at=?, error=NULL, attempts=attempts+1,"
+                                 " meta=? WHERE id=?",  # the fetcher may learn things while downloading (parser)
+                                 (json.dumps(files, ensure_ascii=False), st, db.now_iso(),
+                                  json.dumps(info.meta, ensure_ascii=False), iid))
                 summary["downloaded"].append({"key": info.key, "files": len(files),
                                               "bytes": sum(x["bytes"] for x in files),
                                               "seconds": round(time.monotonic() - t, 1)})
