@@ -1,7 +1,7 @@
 name: Leidiniai
-version: "0.6.0"
+version: "0.7.0"
 slug: leidiniai
-description: Lietuvos prekybos tinklų akcijų leidiniai (IKI, Rimi, Maxima, Norfa, Lidl, Šilas) – vietinis apdorojimas
+description: Lietuvos prekybos tinklų akcijų leidiniai (IKI, Rimi, Maxima, Norfa, Lidl, Šilas, Vynoteka) – vietinis apdorojimas
 url: https://github.com/DG-Lt/lt-leidiniai
 arch:
   - amd64
@@ -32,6 +32,7 @@ options:
     - norfa
     - rimi
     - silas
+    - vynoteka
   browser_fallback: true
   keep_pdf_weeks: 8
   keep_images_weeks: 12
@@ -43,7 +44,7 @@ schema:
   request_delay: float(0.5,30)
   threads: int(1,4)
   chains:
-    - list(iki|lidl|maxima|norfa|rimi|silas)
+    - list(iki|lidl|maxima|norfa|rimi|silas|vynoteka)
   browser_fallback: bool
   keep_pdf_weeks: int(1,104)
   keep_images_weeks: int(1,520)

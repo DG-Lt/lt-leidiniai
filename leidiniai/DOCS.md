@@ -1,6 +1,6 @@
 # Leidiniai
 
-Collects the discount leaflets of IKI, Rimi, Maxima, Norfa, Lidl and Šilas, extracts the offers and keeps their price history. Everything runs locally on this machine; no cloud AI.
+Collects the discount leaflets of IKI, Rimi, Maxima, Norfa, Lidl, Šilas and Vynoteka, extracts the offers and keeps their price history. Everything runs locally on this machine; no cloud AI.
 
 Open the **Leidiniai** panel in the sidebar. Options are explained in the Configuration tab.
 
@@ -26,13 +26,17 @@ products you set by hand never change by themselves.
 
 Norfa's website promotions (fish counter, weekend discounts …) are listed next to the Norfa leaflet.
 
+**Vynoteka**: the food leaflet (PDF) is read like the others; the drinks leaflet is pages of pictures (needs the
+picture reader, ~22 pages); the gift set catalogue lists each set with its price and contents, marked
+**katalogas**. The winter catalogue is a video and is skipped.
+
 ## Home Assistant entities
 Install the **Mosquitto broker** app and the MQTT integration first; Leidiniai finds the broker by itself.
 All entities belong to the device **Leidiniai**:
 
 | Entity | Shows |
 |---|---|
-| `sensor.leidiniai_<chain>_leaflet` (iki, lidl, maxima, norfa, rimi, silas) | title of the leaflet valid today; attributes `valid_from`, `valid_to`, `offers`, `url`, `current`, `upcoming`, `last_check`, `last_error` |
+| `sensor.leidiniai_<chain>_leaflet` (iki, lidl, maxima, norfa, rimi, silas, vynoteka) | title of the leaflet valid today; attributes `valid_from`, `valid_to`, `offers`, `url`, `current`, `upcoming`, `last_check`, `last_error` |
 | `event.leidiniai_new_leaflet` | fires `new_leaflet` once per leaflet that is ready to look at, with `chain`, `chain_name`, `title`, `valid_from`, `valid_to`, `offers`, `url` |
 | `sensor.leidiniai_watched_on_sale` | how many watched (Stebimi) offers are valid today; attribute `items` (name, chain, price €, old price, discount, card, valid to – up to 40) |
 | `binary_sensor.leidiniai_problem` | on when a check or a leaflet failed; attribute `problems` |
@@ -56,7 +60,7 @@ actions:
 ```
 
 ## Picture reader (image-only leaflets)
-Šilas (and some Rimi catalogues) publish their leaflets as pictures only, with no text inside. They show
+Šilas, the Vynoteka drinks leaflet and some Rimi catalogues are published as pictures only, with no text inside. They show
 **laukia skaitytuvo** until a picture reader is chosen in the Configuration tab (`picture_reader`):
 
 | Option | What it needs | Quality |

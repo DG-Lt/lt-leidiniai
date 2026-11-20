@@ -36,6 +36,7 @@ class ChainCfg:
     card_words: tuple[str, ...] = ()
     code_rx: str | None = None     # product code line (ends a text block; stored as ext_id)
     noise: tuple[str, ...] = ()    # extra line patterns that are not part of a name
+    pct_optional: bool = False     # discount badge printed as "-30" with the "%" drawn as a picture (Vynoteka)
 
 
 CFG: dict[str, ChainCfg] = {
@@ -53,6 +54,11 @@ CFG: dict[str, ChainCfg] = {
                            r"^Įprasta kaina$", r"^Supakuota$", r"^SUTAUPOTE$",
                            r"^Pasiūlymas galioja", r"^Nuolaida suteikiama tik", r"^pažymėtoms prekėms\.?$",
                            r"^prekėms\.?$", r"^SUPERKAINA$")),
+    # Vynoteka food leaflet (Nr. 23, 2026-11): badge "-30" 32 pt (no "%" glyph), euros 43 + cents 26 pt,
+    # old price 13–14 pt right under the cents, name 9 pt BELOW the price, "TIK" 30 pt, tags ("ITALIŠKAS") 14 pt
+    "vynoteka": ChainCfg(price_min=36, old_min=11, old_max=16, disc_min=26, text_max=10.5, maxd=90, near=45,
+                         above_penalty=1.0, left_penalty=3.0, pct_optional=True,
+                         noise=(r"Kainos galioja", r"^Nr\.\s*\d+", r"^20\d\d \d\d \d\d", r"^NAUJIENA!?$")),
 }
 
 COMMON_NOISE = (
@@ -185,12 +191,16 @@ def money_tokens(ws, smin, smax, skip: set[int]) -> tuple[list[dict], set[int]]:
     return out, used
 
 
-def discount_tokens(ws, smin) -> tuple[list[dict], set[int]]:
+def discount_tokens(ws, smin, pct_optional: bool = False) -> tuple[list[dict], set[int]]:
     out, used = [], set()
     for w in ws:
         if w["size"] < smin or w["i"] in used:
             continue
         t = w["text"]
+        if pct_optional and re.fullmatch(r"[-–]\d{1,2}", t):
+            used.add(w["i"])
+            out.append({**box([w]), "text": t.replace("–", "-") + "%"})
+            continue
         if re.fullmatch(r"[-–]\d{1,2}\s?%", t) or re.fullmatch(r"\d\+\d", t):
             used.add(w["i"])
             out.append({**box([w]), "text": t.replace("–", "-").replace(" ", "")})
@@ -290,7 +300,7 @@ def parse_page(page, pno: int, chain: str, cfg: ChainCfg) -> list[Offer]:
 def parse_words(ws: list[dict], imgs: list[dict], pno: int, chain: str, cfg: ChainCfg) -> list[Offer]:
     """Words {text, x0, x1, top, bottom, size, i} (PDF text layer or OCR, in points) → offers."""
     unit_ids = unit_token_ids(ws)
-    disc, du = discount_tokens(ws, cfg.disc_min)
+    disc, du = discount_tokens(ws, cfg.disc_min, cfg.pct_optional)
     prices, pu = money_tokens(ws, cfg.price_min, 400, du | unit_ids)
     olds, ou = money_tokens(ws, cfg.old_min, cfg.old_max, du | pu | unit_ids)
     used = du | pu | ou

@@ -35,8 +35,15 @@ IKI "apdovanotų vynų ir šampanų kolekcija 2025" (29 p.) and Rimi "2025 m. Li
 ## Categorising
 Order (0.5.0): shop's own category (strong map) → keyword the user taught → **similar products** (inverted index over 5-letter stems of products categorised by a shop or the user; weighted Dice ≥ 0.35 with ≥ 2 shared stems; winner ≥ 60 % of the votes and support ≥ 0.9; user corrections weigh 3) → built-in keyword list (genitive-plural words don't decide) → shop's vague category → other. Unlocked products are re-sorted after each check and after each correction. Later: multilingual-e5-small for what is still 'other'.
 
-## Vynoteka (to do)
-https://vynoteka.lt/ – drinks shop with leaflets: "Gėrimų leidinys" (https://vynoteka.lt/gerimu-leidinys-2026-23, "Leidinys online" + "Leidinys PDF" in the LEIDINIAI menu), "Maisto leidinys", "Kalėdinių rinkinių katalogas 2026", "Žiemos katalogas 2026" (checked 2026-11-20; PDF link not yet looked at).
+## Vynoteka (checked 2026-11-20)
+The home page https://vynoteka.lt/ links every publication in its LEIDINIAI menu; each publication page prints
+"Kainos galioja 2026 11 16 - 2026 11 29". The site's age gate is client-side (plain requests get the page).
+| Publication | Page | Content |
+|---|---|---|
+| Gėrimų leidinys (Nr. 23) | /gerimu-leidinys-2026-23 ("Leidinys PDF" = ?pdf=1, the same viewer) | `<Flyer pages='["325_slide_1.jpg" …]' front-cover=… back-cover=…>` – 20 JPEG pages /upload/pdf/325_slide_N.jpg (2480×3508) + 2 covers; **no PDF** (/upload/pdf/325.pdf is 404) → picture reader |
+| Maisto leidinys (Nr. 23, biweekly) | /nr-23-kainos-galioja-2026-11-09-2026-11-22 | `<div class="flip-book-container1" src="/upload/media/<hash>.pdf">` – 8 pages, Illustrator, text layer: badge "-30" 32 pt (the "%" is a picture) or "TIK" 30 pt, euros 43 + cents 26 pt, old price 13–14 pt under the cents, name 9 pt **below** the price, tags ("ITALIŠKAS", "NAUJIENA!") 14 pt → `pdf_text` ChainCfg "vynoteka" (6/6 right on page 2) |
+| Kalėdinių rinkinių katalogas 2026 | /kalediniu-rinkiniu-katalogas-2026 | PDF (Canva, 24 pages): one gift set per page – title 52 pt, "R I N K I N Y S N R . 2" 20 pt, "13,99 €" 48 pt, contents 13 pt numbered "01" 23 pt; the next page repeats number + price → `parsers/vynoteka.py` |
+| Žiemos katalogas 2026 | /ziemos-katalogas-2026 | `<publication-video>` mp4 only – skipped |
 
 ## Next steps
 1. Tune parsers per chain; add Šilas via Ollama + Qwen2.5-VL.

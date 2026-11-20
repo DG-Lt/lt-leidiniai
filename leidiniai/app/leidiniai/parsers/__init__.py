@@ -118,6 +118,15 @@ def parse_issue(chain: str, parser: str, files: list[dict], meta: dict, ref: dat
                     o.extra["file"] = f["name"]
                     out.append(o)
         return out
+    if parser == "vynoteka":
+        from . import vynoteka
+        out = []
+        for f in files:
+            if f["name"].lower().endswith(".pdf"):
+                for o in vynoteka.parse(f["path"], chain, log=log):
+                    o.extra["file"] = f["name"]
+                    out.append(o)
+        return out
     if parser == "pdf":
         from . import pdf_text
         out: list[Offer] = []
