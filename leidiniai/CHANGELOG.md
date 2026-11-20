@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.5
+- Offer cards show the chain's logo. It is downloaded once from the shop's own site after that chain's next check
+  (refreshed every 30 days); on **Būsena → Tinklų logotipai** you can upload your own file instead (PNG, JPG, WEBP,
+  SVG, up to 512 KB). Without a logo the coloured name is shown as before.
+- **Pasiūlymai**: new checkbox **Stebimi viršuje** – offers matching the watch list come first, the rest follow; both
+  groups keep the chosen sort, and all other filters still apply.
+
 ## 0.4.4
 - Rimi: the e-shop look-ups (one per product spot, `request_delay` apart – about 15–20 min for the weekly leaflet at
   4 s) now log the expected time at the start and progress every 25 look-ups, so a long check no longer looks stuck.
