@@ -48,7 +48,7 @@ def _near_year(month: int, day: int, ref: date) -> date:
 
 
 _RE_DATE = re.compile(
-    r"(?P<iso>(?P<y1>20\d\d)[.\-/](?P<m1>\d{1,2})[.\-/](?P<d1>\d{1,2}))"
+    r"(?P<iso>(?P<y1>20\d\d)(?P<sep>[.\-/]|\s)(?P<m1>\d{1,2})(?P=sep)(?P<d1>\d{1,2})(?!\d))"
     r"|(?P<lt>(?:(?P<y2>20\d\d)\s*m\.?\s*)?(?P<mon>[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]{3,})\s+(?P<d2>\d{1,2})\s*d\b\.?)"
     r"|(?P<md>\b(?P<m3>\d{1,2})\.(?P<d3>\d{1,2})\b)",
 )

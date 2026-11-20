@@ -82,3 +82,69 @@ def test_leaflets_page(settings):
     r = c.get("/leidiniai")
     assert r.status_code == 200 and "Tikrinti dabar" in r.get_data(as_text=True)
     assert c.post("/tikrinti", data={"chain": "iki"}).status_code == 302
+
+
+IKI_MAIN = """<html><body><header><a href="https://iki.lt/leidiniai/">Leidiniai</a></header>
+<div class="page-content publications pb-0"><h1>Akcijų leidiniai</h1>
+ <h2 class="title">IKI Kainų leidinys Nr. 47</h2>
+ <div class="date-block">Pasiūlymai galioja 2026 11 16 - 2026 11 22</div>
+ <div class="mt-4"><a href="https://iki.lt/wp-content/uploads/2026/11/18/IKI-Nr_47-2026-11-16-11-22-d-koreguotas.pdf">ATSIŲSTI LEIDINĮ</a></div>
+</div>
+<h2>Kiti IKI leidiniai</h2>
+<a href="https://iki.lt/leidiniai/specialus-pasiulymai-204/">Specialūs pasiūlymai</a>
+<a href="https://iki.lt/leidiniai/specialus-pasiulymai-204/">ŽIŪRĖTI</a>
+<a href="https://iki.lt/leidiniai/vynu-kolekcija-2025/">Vynų kolekcija</a>
+<footer><a href="https://iki.lt/wp-content/uploads/2025/07/15/Vartotoju-uzklausu-nagrinejimo-tvarka_20180827.pdf">Tvarka</a>
+<a href="https://iki.lt/wp-content/uploads/2025/12/15/Socialiniu-tinklu-privatumo-politika.pdf">Politika</a>
+<a href="https://iki.lt/leidiniai/nuoroda-apacioje/">x</a></footer></body></html>"""
+
+
+def iki_sub(title, date_text, pdf):
+    return (f'<div class="page-content publications"><h2 class="title">{title}</h2>'
+            f'<div class="date-block">{date_text}</div><a href="{pdf}">ATSIŲSTI LEIDINĮ</a></div>'
+            '<footer><a href="https://iki.lt/wp-content/uploads/2025/12/15/Socialiniu-tinklu-privatumo-politika.pdf">p</a></footer>')
+
+
+def test_iki_discover_only_leaflet_blocks():
+    import logging
+    from leidiniai.fetchers import iki
+    h = FakeHttp({
+        iki.Iki.listing_url: IKI_MAIN,
+        "https://iki.lt/leidiniai/specialus-pasiulymai-204/": iki_sub(
+            "Specialūs pasiūlymai IKI parduotuvės klientams", "Pasiūlymai galioja 2026 11 16 - 2026 11 22",
+            "https://iki.lt/wp-content/uploads/2026/11/13/A4-Dienos-pasiulymu-palaikymas-W47-Stotis-Vilnius-Ringaudai.pdf"),
+        "https://iki.lt/leidiniai/vynu-kolekcija-2025/": iki_sub(
+            "IKI apdovanotų vynų ir šampanų kolekcija 2025", "",
+            "https://iki.lt/wp-content/uploads/2025/12/12/IKI-apdovanotu-vynu-ir-sampanu-kolekcija-2025.pdf"),
+    })
+    out = iki.Iki(h, logging.getLogger("t"), REF).discover()
+    assert [i.key for i in out] == ["IKI-Nr_47-2026-11-16-11-22-d-koreguotas",
+                                    "A4-Dienos-pasiulymu-palaikymas-W47-Stotis-Vilnius-Ringaudai",
+                                    "IKI-apdovanotu-vynu-ir-sampanu-kolekcija-2025"]
+    m = out[0]
+    assert (m.title, m.number, m.series, m.valid_from, m.valid_to) == \
+        ("IKI Kainų leidinys Nr. 47", "47", "kainu-leidinys", date(2026, 11, 16), date(2026, 11, 22))
+    assert (out[1].series, out[1].number, out[1].valid_to) == \
+        ("a4-dienos-pasiulymu-palaikymas-stotis-vilnius-ringaudai", "47", date(2026, 11, 22))
+    assert (out[2].valid_from, out[2].valid_to, out[2].number) == (None, None, None)
+
+
+def test_iki_old_week_code_names():
+    import logging
+    from leidiniai.fetchers import iki
+    page = iki_sub("IKI Kainų leidinys", "", "https://iki.lt/wp-content/uploads/2026/11/13/B47-bazinis_www.pdf")
+    i = iki.Iki(FakeHttp({iki.Iki.listing_url: page}), logging.getLogger("t"), REF).discover()[0]
+    assert (i.number, i.valid_from, i.valid_to, i.series) == ("47", date(2026, 11, 16), date(2026, 11, 22), "kainu-leidinys")
+
+
+def test_migration_3_drops_iki_footer_pdfs(tmp_path):
+    conn = db.connect(tmp_path / "x.db")
+    db.migrate(conn)
+    with conn:
+        for key in ("Vartotoju-uzklausu-nagrinejimo-tvarka_20180827", "Socialiniu-tinklu-privatumo-politika",
+                    "IKI-Nr_47-2026-11-16-11-22-d-koreguotas"):
+            conn.execute("INSERT INTO issues(chain,key,series,title,status,offers,first_seen,last_seen)"
+                         " VALUES('iki',?,?,?,'parsed',?,'t','t')", (key, key.lower(), key, 0 if "Nr_47" not in key else 445))
+        conn.execute("PRAGMA user_version=2")
+    assert db.migrate(conn) == len(db.MIGRATIONS)
+    assert [r[0] for r in conn.execute("SELECT key FROM issues")] == ["IKI-Nr_47-2026-11-16-11-22-d-koreguotas"]

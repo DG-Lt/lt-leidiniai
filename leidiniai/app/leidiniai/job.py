@@ -29,9 +29,10 @@ def upsert(conn, info, now) -> tuple[int, bool]:
             if info.meta.get("listed_only"):
                 conn.execute("UPDATE issues SET last_seen=? WHERE id=?", (now, r["id"]))
             else:
-                conn.execute("UPDATE issues SET last_seen=?, title=?, valid_from=COALESCE(?,valid_from),"
-                             " valid_to=COALESCE(?,valid_to), meta=? WHERE id=?",
-                             (now, info.title, vf, vt, json.dumps(info.meta, ensure_ascii=False), r["id"]))
+                conn.execute("UPDATE issues SET last_seen=?, title=?, series=?, number=COALESCE(?,number),"
+                             " valid_from=COALESCE(?,valid_from), valid_to=COALESCE(?,valid_to), meta=? WHERE id=?",
+                             (now, info.title, info.series, info.number, vf, vt,
+                              json.dumps(info.meta, ensure_ascii=False), r["id"]))
             return r["id"], False
         cur = conn.execute(
             "INSERT INTO issues(chain,key,series,title,number,valid_from,valid_to,source_url,meta,status,first_seen,last_seen)"
