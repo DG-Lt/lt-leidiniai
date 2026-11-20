@@ -10,6 +10,23 @@
 </table>
 </div>
 
+<h2 id="logotipai">Tinklų logotipai</h2>
+<p class="muted small">Rodomi pasiūlymų kortelėse. Atsisiunčiami iš tinklo svetainės po pirmo tikrinimo; savo failą (PNG, JPG, WEBP, SVG, iki 512 KB)
+galite įkelti – jis visada naudojamas vietoj atsisiųsto.</p>
+<div class="card">
+<table>
+  {% for r in logo_rows %}
+  <tr><th>{{ r.name }}</th>
+    <td>{% if r.url %}<img class="logo" src="{{ r.url }}" alt="{{ r.name }}">{% else %}<span class="chain c-{{ r.chain }}">{{ r.name }}</span>{% endif %}
+      <span class="muted small">{{ 'įkeltas' if r.user else 'atsisiųstas' if r.auto else 'dar nėra' }}</span></td>
+    <td><form method="post" action="{{ url_for('ui.logo_upload', chain=r.chain) }}" enctype="multipart/form-data" class="inline">
+      <input type="file" name="file" accept=".png,.jpg,.jpeg,.webp,.svg,image/*"> <button class="secondary">Įkelti</button>
+      {% if r.user %}<button class="secondary" name="remove" value="1">Pašalinti įkeltą</button>{% endif %}
+    </form></td></tr>
+  {% endfor %}
+</table>
+</div>
+
 <h2>Žurnalai</h2>
 <p>
   <a class="btn" href="{{ url_for('ui.logs_zip') }}" download>Atsisiųsti žurnalus</a>

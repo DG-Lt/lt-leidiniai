@@ -14,3 +14,10 @@ def settings(tmp_path, monkeypatch):
     s = config.load(tmp_path)
     s.ensure_dirs()
     return s
+
+
+@pytest.fixture(autouse=True)
+def no_logo_downloads(monkeypatch):
+    """Job tests must not fetch the shops' logos from the internet; test_logos_* sets its own source."""
+    from leidiniai import logos
+    monkeypatch.setattr(logos, "SOURCES", {})

@@ -65,7 +65,8 @@ def _filters(args):
             "cat": args.get("cat") if args.get("cat") in CATEGORIES else "",
             "when": args.get("when") if args.get("when") in WHEN_LT else "now",
             "sort": args.get("sort") if args.get("sort") in SORTS else "disc",
-            "disc": "1" if args.get("disc") == "1" else "", "nocard": "1" if args.get("nocard") == "1" else ""}
+            "disc": "1" if args.get("disc") == "1" else "", "nocard": "1" if args.get("nocard") == "1" else "",
+            "top": "1" if args.get("top") == "1" else ""}
 
 
 def _where(f, today: date, with_chain: bool = True) -> tuple[str, list]:
@@ -86,6 +87,21 @@ def _where(f, today: date, with_chain: bool = True) -> tuple[str, list]:
     return where, a
 
 
+def watched_sql(terms) -> tuple[str, list]:
+    """SQL expression: 1 when the offer matches a watch-list term (same rule as `watched`), else 0."""
+    if not terms:
+        return "0", []
+    parts, a = [], []
+    for t in terms:
+        if t["chain"]:
+            parts.append("(instr(o.name_key, ?) > 0 AND o.chain=?)")
+            a += [t["term_key"], t["chain"]]
+        else:
+            parts.append("instr(o.name_key, ?) > 0")
+            a.append(t["term_key"])
+    return "(CASE WHEN " + " OR ".join(parts) + " THEN 1 ELSE 0 END)", a
+
+
 def query_offers(conn, args, today: date):
     f = _filters(args)
     try:
@@ -95,8 +111,12 @@ def query_offers(conn, args, today: date):
     where, a = _where(f, today)
     base = f"FROM offers o JOIN issues i ON i.id=o.issue_id WHERE {where}"
     total = conn.execute(f"SELECT COUNT(*) {base}", a).fetchone()[0]
-    rows = conn.execute(f"SELECT o.*, i.title AS issue_title, i.source_url {base} ORDER BY {SORTS[f['sort']]}"
-                        f" LIMIT {PAGE_SIZE} OFFSET {(page - 1) * PAGE_SIZE}", a).fetchall()
+    order, oa = SORTS[f["sort"]], []
+    if f["top"]:  # "Stebimi viršuje": watched offers first, each group in the chosen order; filters unchanged
+        expr, oa = watched_sql(watch_terms(conn))
+        order = f"{expr} DESC, {order}"
+    rows = conn.execute(f"SELECT o.*, i.title AS issue_title, i.source_url {base} ORDER BY {order}"
+                        f" LIMIT {PAGE_SIZE} OFFSET {(page - 1) * PAGE_SIZE}", a + oa).fetchall()
     w2, a2 = _where(f, today, with_chain=False)
     counts = {r[0]: r[1] for r in conn.execute(
         f"SELECT o.chain, COUNT(*) FROM offers o JOIN issues i ON i.id=o.issue_id WHERE {w2} GROUP BY o.chain", a2)}
@@ -125,8 +145,13 @@ def extra_of(row) -> dict:
         return {}
 
 
+def logo_url(chain: str) -> str | None:
+    from .. import logos
+    return url_for("offers.logo", chain=chain) if logos.find(settings(), chain) else None
+
+
 def ctx():
-    return {"CATEGORIES": CATEGORIES, "image_url": image_url, "SORT_LT": SORT_LT, "WHEN_LT": WHEN_LT, "flags_of": flags_of, "extra_of": extra_of,
+    return {"CATEGORIES": CATEGORIES, "image_url": image_url, "logo_url": logo_url, "SORT_LT": SORT_LT, "WHEN_LT": WHEN_LT, "flags_of": flags_of, "extra_of": extra_of,
             "today_iso": date.today().isoformat()}
 
 
@@ -142,6 +167,18 @@ def offers():
     marks = {r["id"]: watched(r["name_key"], r["chain"], terms) for r in rows}
     return render_template("offers.html", offers=rows, total=total, page=page, pages=pages, f=f, counts=counts,
                            marks=marks, leaflets=leaflets, **ctx())
+
+
+@bp.get("/logo/<chain>")
+def logo(chain):
+    from .. import logos
+    p = logos.find(settings(), chain) if chain in CHAIN_NAMES else None
+    if not p:
+        abort(404)
+    r = send_from_directory(p.parent, p.name, mimetype=logos.MIME[p.suffix], max_age=3600)
+    r.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; img-src data:"
+    r.headers["X-Content-Type-Options"] = "nosniff"
+    return r
 
 
 @bp.get("/img/<path:path>")

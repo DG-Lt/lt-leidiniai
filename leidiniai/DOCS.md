@@ -10,9 +10,11 @@ Open the **Leidiniai** panel in the sidebar. Options are explained in the Config
   Click an offer for its price history, the same product in other chains and the category correction.
   "Įsiminti raktažodį" (remember keyword) teaches the category dictionary; all products not set by hand are
   then sorted again.
+  **Stebimi viršuje** puts the watch-list matches first (other filters and the sort still apply).
 - **Stebimi** – the watch list: words to look for in every new leaflet, with the matching offers.
 - **Leidiniai** – leaflets found, their state, the last checks (click one for its summary) and a "check now" button.
-- **Būsena** – version, options, the last log lines and **Atsisiųsti žurnalus**.
+- **Būsena** – version, options, **Tinklų logotipai** (chain logos: downloaded from the shops' sites, or upload your
+  own), the last log lines and **Atsisiųsti žurnalus**.
 
 ## Home Assistant entities
 Install the **Mosquitto broker** app and the MQTT integration first; Leidiniai finds the broker by itself.

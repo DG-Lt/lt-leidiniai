@@ -50,3 +50,6 @@ button.small { padding:.15rem .5rem; font-size:.8rem; }
 .product { display:grid; grid-template-columns:minmax(160px, 320px) 1fr; gap:1rem; align-items:start; }
 .product .pimg img { width:100%; background:#fff; border-radius:8px; border:1px solid var(--line); }
 @media (max-width: 640px) { .product { grid-template-columns:1fr; } }
+/* chain logo on a white chip, so dark logos stay readable in the dark theme */
+img.logo { height:20px; max-width:76px; object-fit:contain; background:#fff; border-radius:4px; padding:1px 4px; vertical-align:middle; }
+td img.logo { height:28px; max-width:110px; }
