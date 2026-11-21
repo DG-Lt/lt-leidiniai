@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.8.1
+**Stebimi (watch list)**
+- A watched word list now matches when **every word** is in the name, **in any order**: "Natura aliejus" finds
+  "Saulėgrąžų aliejus NATURA*, 1,5 l" (0.8.0 found nothing). Same rule on the Stebimi page, in "Stebimi viršuje",
+  `sensor.leidiniai_watched_on_sale` and `event.leidiniai_watch_hit`.
+- **Tikslus žodis** per watched word (whole words only: "alus" no longer finds "natūralus"): tick it when adding,
+  or on the word's heading.
+- New view **Pagal tinklą**: shops with the most watched offers first, each offer once, the words that found them
+  in the heading. The page remembers the chosen view.
+- `event.leidiniai_watch_hit` fires only for leaflets that first appear after the word was added; reading a leaflet
+  again (or a name fix) no longer makes its offers "new" (0.8.0 re-announced 11 offers after its re-parse).
+- `sensor.leidiniai_watched_on_sale`: attributes `by_chain` (offers per shop, most first), `ending_soon`, and per
+  item `terms` and `ending_soon`.
+
+**Offers ending soon**
+- New option **ending_soon_days** (default 3, 0 = off): the end date of an offer ending within that many days
+  (today included) is highlighted on the cards and the details page.
+- New filter **Besibaigiantys** in Pasiūlymai: only those offers.
+
+**Other**
+- Lidl: dates printed in front of a name ("11 21–11 22 PILOS / POLMLEK SVIESTAS …") become the offer's own dates and
+  leave the name (also "Nuo šeštadienio, 11 21, iki 11 22" at the end).
+- **Skaityti iš naujo** only marks the leaflet: it is read at night, or at once with "Skaityti paveikslėlius
+  dabar" (the count on that button includes it).
+
 ## 0.8.0
 **Picture reader (Šilas, Vynoteka drinks)**
 - **Pictures are read at night only, on their own.** A check ("Tikrinti dabar" or the night check) only downloads

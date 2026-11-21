@@ -82,6 +82,10 @@ LIDL_RX = re.compile(
     r"|Ieškoti\s+šaldytuve"
     r"|Nevartoti\s+su\s+alkoholiniais\s+gėrimais\.?"
     r"|(?<![\d,.])\b\d{6,7}(?:\s*[-,]\s*\d{5,7})*\b(?![,.]\d)", re.I)
+# Lidl: an offer's own dates printed in front of the name ("11.21–11.22 PILOS …"; the dot is a separate glyph, so
+# the text reads "11 21–11 22") and the repeat at the end ("Nuo pirmadienio, 11 16, iki 11 22")
+LIDL_DATES = re.compile(r"^\s*(\d{1,2})[ .](\d{1,2})\s*[–-]\s*(\d{1,2})[ .](\d{1,2})\b\.?\s*")
+LIDL_DATES_AGAIN = re.compile(r"\s*Nuo\s+[^\W\d_]+,?\s+\d{1,2}[ .]\d{1,2},?\s+iki\s+\d{1,2}[ .]\d{1,2}\.?", re.I)
 # ≥4 single letters in a row: a vertical badge ('SUPERKAINA' stacked or rotated) read letter by letter
 _UP = "A-ZĄČĘĖĮŠŲŪŽ"
 LETTER_RUN = re.compile(rf"(?:(?<=\s)|^)(?:[{_UP}]\s+){{3,}}[{_UP}](?=\s|$)")
@@ -374,7 +378,16 @@ def parse_words(ws: list[dict], imgs: list[dict], pno: int, chain: str, cfg: Cha
                 continue  # a lone letter: one line of vertical lettering
             name_lines.append(t2)
         name = clean_name(" ".join(name_lines), chain)
+        dates_text = None
+        if chain == "lidl":
+            m = LIDL_DATES.match(name)
+            if m and 1 <= int(m.group(1)) <= 12 and 1 <= int(m.group(3)) <= 12:
+                dates_text = f"{m.group(1)}.{m.group(2)}–{m.group(3)}.{m.group(4)}"
+                name = name[m.end():]
+            name = LIDL_DATES_AGAIN.sub("", name).strip()
         o = Offer(chain=chain, name=name, kind=a["kind"], page=pno)
+        if dates_text:
+            o.extra["dates_text"] = dates_text  # → the offer's own dates (vision.offer_dates in pipeline)
         if a["kind"] == "price":
             o.price = a["value"]
             if att[i]["old"]:

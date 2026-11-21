@@ -26,7 +26,7 @@
   </div>
   <div class="small muted">
     {% if o.unit_price %}{{ o.unit_price|money }}/{{ o.unit }}{% endif %}
-    {% if o.valid_to %} · iki {{ o.valid_to|day }}{% endif %}
+    {% if o.valid_to %} · {% if ending_soon(o.valid_to) %}<span class="ending" title="Baigiasi per {{ ending_days }} d.">iki {{ o.valid_to|day }}</span>{% else %}iki {{ o.valid_to|day }}{% endif %}{% endif %}
     {% if o.valid_from and o.valid_from > today_iso %} · nuo {{ o.valid_from|day }}{% endif %}
   </div>
 </div>

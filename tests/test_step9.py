@@ -385,9 +385,10 @@ def test_leaflets_page_picture_buttons(settings, tmp_path, monkeypatch):
     html = c.get("/leidiniai").get_data(as_text=True)
     assert "Skaityti paveikslėlius dabar" in html and "Skaityti iš naujo" in html
     assert c.post(f"/leidinys/{iid}/skaityti-is-naujo").status_code == 302
-    assert runner.pq.get_nowait() == ("manual", iid)
+    assert runner.pq.empty()  # 0.8.1: only marked – read at night or with the button
+    html = c.get("/leidiniai").get_data(as_text=True)
+    assert "laukia skaitymo iš naujo" in html and "Skaityti paveikslėlius dabar (1)" in html
     assert c.post("/paveiksleliai").status_code == 302 and runner.pq.get_nowait() == ("manual", None)
-    assert "laukia skaitymo iš naujo" in c.get("/leidiniai").get_data(as_text=True)
 
 
 # --------------------------------------------------------------------------- Home Assistant
@@ -407,10 +408,13 @@ def test_watch_hits_only_for_leaflets_read_after_the_term(settings):
     conn = db.open_db(settings)
     with conn:
         conn.execute("INSERT INTO watch(term,term_key,created) VALUES('Sviestas','sviestas','2026-11-20T10:00:00+02:00')")
+        # 0.8.1: "new" = leaflet first seen after the word was added (a re-read of an older one is not new)
         old = conn.execute("INSERT INTO issues(chain,key,series,title,valid_to,first_seen,last_seen,status,parsed_at)"
-                           " VALUES('iki','a','s','IKI 46','2099-01-01','x','x','parsed','2026-11-19T03:30:00+02:00')").lastrowid
+                           " VALUES('iki','a','s','IKI 46','2099-01-01','2026-11-19T03:30:00+02:00','x','parsed',"
+                           " '2026-11-21T11:57:00+02:00')").lastrowid
         new = conn.execute("INSERT INTO issues(chain,key,series,title,valid_to,first_seen,last_seen,status,parsed_at)"
-                           " VALUES('rimi','b','s','Rimi 47','2099-01-01','x','x','parsed','2026-11-21T03:30:00+02:00')").lastrowid
+                           " VALUES('rimi','b','s','Rimi 47','2099-01-01','2026-11-21T03:30:00+02:00','x','parsed',"
+                           " '2026-11-21T03:30:00+02:00')").lastrowid
     for iid, chain in ((old, "iki"), (new, "rimi")):
         issue = conn.execute("SELECT * FROM issues WHERE id=?", (iid,)).fetchone()
         store.save_offers(conn, issue, [finish(Offer(chain=chain, name="Sviestas ROKIŠKIO, 200 g", price=119, old_price=279))])
@@ -432,7 +436,7 @@ def test_watch_hit_event_once(settings):
     with conn:
         conn.execute("INSERT INTO watch(term,term_key,created) VALUES('Sviestas','sviestas','2000-01-01')")
         iid = conn.execute("INSERT INTO issues(chain,key,series,title,valid_to,first_seen,last_seen,status,parsed_at)"
-                           " VALUES('rimi','b','s','Rimi 47','2099-01-01','x','x','parsed',?)", (db.now_iso(),)).lastrowid
+                           " VALUES('rimi','b','s','Rimi 47','2099-01-01',?,'x','parsed',?)", (db.now_iso(), db.now_iso())).lastrowid
     issue = conn.execute("SELECT * FROM issues WHERE id=?", (iid,)).fetchone()
     store.save_offers(conn, issue, [finish(Offer(chain="rimi", name="Sviestas ROKIŠKIO", price=119))])
     b.announce_watch_hits()
@@ -464,6 +468,6 @@ def test_migration_6_reads_valid_pdf_leaflets_again(settings):
                      " VALUES('lidl','a','s','t','2099-01-01','[{\"name\":\"a.pdf\"}]','x','x','parsed')")
         conn.execute("INSERT INTO issues(chain,key,series,title,valid_to,files,first_seen,last_seen,status)"
                      " VALUES('silas','b','s','t','2099-01-01','[{\"name\":\"b.pdf\"}]','x','x','parsed')")
-    assert db.migrate(conn) == 6
+    assert db.migrate(conn) == len(db.MIGRATIONS)
     st = dict(conn.execute("SELECT chain, status FROM issues").fetchall())
     assert st == {"lidl": "downloaded", "silas": "parsed"}  # picture leaflets are re-read only on request

@@ -4,23 +4,47 @@
 {% block content %}
 <h1>Stebimi</h1>
 <form class="filters" method="post" action="{{ url_for('offers.watch_add') }}">
-  <label>Ko ieškoti <input name="term" placeholder="pvz. sviestas, Rokiškio" required minlength="3"></label>
+  <label>Ko ieškoti <input name="term" placeholder="pvz. sviestas, Natura aliejus" required minlength="3"></label>
   <label>Tinklas <select name="chain"><option value="">Visi</option>
     {% for c, n in CHAIN_NAMES.items() %}<option value="{{ c }}">{{ n }}</option>{% endfor %}</select></label>
+  <label class="check" title="Ieškoti tik pilnų žodžių: „alus“ neras „natūralus“"><input type="checkbox" name="exact" value="1"> Tikslus žodis</label>
   <button>Pridėti</button>
 </form>
-<p class="muted small">Ieškoma pavadinime be lietuviškų raidžių ir didžiųjų raidžių skirtumo: „sviest“ ras „Sviestas“ ir „SVIESTAS“.</p>
-{% if not terms %}<p class="muted">Stebimų prekių dar nėra.</p>{% endif %}
+<p class="muted small">Ieškoma pavadinime ir aprašyme be lietuviškų raidžių ir didžiųjų raidžių skirtumo; turi būti visi žodžiai,
+  tvarka nesvarbi: „natura aliejus“ ras „Saulėgrąžų aliejus NATURA“, „sviest“ ras „SVIESTAS“.</p>
+{% if not terms %}<p class="muted">Stebimų prekių dar nėra.</p>{% else %}
+<div class="viewswitch">{% for v, n in views.items() %}<a href="{{ url_for('offers.watch', view=v) }}" class="{{ 'on' if v == view }}">{{ n }}</a>{% endfor %}</div>
+{% endif %}
+
+{% if view == 'tinklas' %}
+  {% if terms and not chains %}<p class="muted">Šiuo metu stebimų akcijose nėra.</p>{% endif %}
+  {% for g in chains %}
+  <section class="watchterm">
+    <h2>{{ CHAIN_NAMES[g.chain] }} <span class="muted small">– {{ g.offers|length }} pasiūl.</span></h2>
+    <p class="muted small">{% for t, n in g.terms.items() %}{{ t }} ({{ n }}){{ ', ' if not loop.last }}{% endfor %}</p>
+    <div class="grid">{% for o in g.offers %}{{ offer_card(o, true) }}{% endfor %}</div>
+  </section>
+  {% endfor %}
+  {% if terms %}
+  <h2>Stebimi žodžiai</h2>
+  <ul class="small">{% for t in terms %}<li>{{ t.term }}{% if t.chain %} ({{ CHAIN_NAMES[t.chain] }}){% endif %}{% if t.exact %} – tikslus žodis{% endif %} – {{ hits[t.id]|length }} pasiūl.</li>{% endfor %}</ul>
+  {% endif %}
+{% else %}
 {% for t in terms %}
 <section class="watchterm">
   <h2>{{ t.term }}{% if t.chain %} <span class="muted">({{ CHAIN_NAMES[t.chain] }})</span>{% endif %}
     <span class="muted small">– {{ hits[t.id]|length }} pasiūl.</span>
+    <form method="post" action="{{ url_for('offers.watch_exact', wid=t.id) }}" class="inline">
+      <label class="check small" title="Ieškoti tik pilnų žodžių"><input type="checkbox" name="exact" value="1" {{ 'checked' if t.exact }} onchange="this.form.submit()"> Tikslus žodis</label>
+      <noscript><button class="secondary small">Išsaugoti</button></noscript>
+    </form>
     <form method="post" action="{{ url_for('offers.watch_delete', wid=t.id) }}" class="inline"><button class="secondary small">Šalinti</button></form>
   </h2>
   {% if hits[t.id] %}
   <div class="grid">{% for o in hits[t.id][:24] %}{{ offer_card(o, true) }}{% endfor %}</div>
-  {% if hits[t.id]|length > 24 %}<p><a href="{{ url_for('offers.offers', q=t.term_key, chain=t.chain or '', when='all', sort='price') }}">Visi {{ hits[t.id]|length }} ›</a></p>{% endif %}
+  {% if hits[t.id]|length > 24 %}<p><a href="{{ url_for('offers.offers', q=t.term_key, chain=t.chain or '', when='all', sort='price', exact='1' if t.exact else '') }}">Visi {{ hits[t.id]|length }} ›</a></p>{% endif %}
   {% else %}<p class="muted">Šiuo metu akcijose nėra.</p>{% endif %}
 </section>
 {% endfor %}
+{% endif %}
 {% endblock %}

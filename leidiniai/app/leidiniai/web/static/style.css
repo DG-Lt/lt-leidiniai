@@ -62,3 +62,9 @@ td img.logo { height:28px; max-width:120px; }
 .offer span.name a.name { color:var(--muted); }
 .progress { font-size:.85rem; }
 button.link { background:none; border:none; color:var(--accent); padding:0 .3rem; text-decoration:underline; cursor:pointer; }
+
+/* 0.8.1: end date of an offer that ends within ending_soon_days */
+.ending { color:var(--warn); font-weight:600; background:rgba(239,108,0,.12); border-radius:4px; padding:0 .25rem; }
+.viewswitch { display:flex; gap:.4rem; margin:.4rem 0 .8rem; }
+.viewswitch a { padding:.25rem .7rem; border:1px solid var(--accent); border-radius:6px; text-decoration:none; }
+.viewswitch a.on { background:var(--accent); color:#fff; }

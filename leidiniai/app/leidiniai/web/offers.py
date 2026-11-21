@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, send_from_directory, url_for
 
-from .. import CHAIN_NAMES, db, store
+from .. import CHAIN_NAMES, db, store, watchmatch
 from ..categories import CATEGORIES
 from ..textutil import fold
 
@@ -43,7 +43,17 @@ def watch_terms(conn) -> list:
 
 
 def watched(name_key: str, chain: str, terms) -> bool:
-    return any(t["term_key"] in name_key and (not t["chain"] or t["chain"] == chain) for t in terms)
+    return bool(watchmatch.matching_terms(terms, name_key, chain))
+
+
+def ending_days() -> int:
+    return settings().ending_soon_days
+
+
+def ending_soon(valid_to) -> bool:
+    """End date within `ending_soon_days` (today included): highlighted wherever an offer's end date is shown."""
+    from ..ha_state import ending_soon as _es
+    return ending_days() > 0 and _es(valid_to, date.today(), ending_days())
 
 
 def current_where(today: date, when: str) -> tuple[str, list]:
@@ -67,7 +77,8 @@ def _filters(args):
             "when": args.get("when") if args.get("when") in WHEN_LT else "now",
             "sort": args.get("sort") if args.get("sort") in SORTS else "disc",
             "disc": "1" if args.get("disc") == "1" else "", "nocard": "1" if args.get("nocard") == "1" else "",
-            "top": "1" if args.get("top") == "1" else "", "exact": "1" if args.get("exact") == "1" else ""}
+            "top": "1" if args.get("top") == "1" else "", "exact": "1" if args.get("exact") == "1" else "",
+            "ending": "1" if args.get("ending") == "1" else ""}
 
 
 def _where(f, today: date, with_chain: bool = True) -> tuple[str, list]:
@@ -89,6 +100,9 @@ def _where(f, today: date, with_chain: bool = True) -> tuple[str, list]:
         where += " AND (o.discount_pct > 0 OR o.discount_text IS NOT NULL)"
     if f["nocard"]:
         where += " AND o.card=0"
+    if f["ending"]:  # "Besibaigiantys": ends within ending_soon_days (today included)
+        where += " AND o.valid_to IS NOT NULL AND o.valid_to >= ? AND o.valid_to <= ?"
+        a += [today.isoformat(), (today + timedelta(days=ending_days())).isoformat()]
     return where, a
 
 
@@ -98,12 +112,9 @@ def watched_sql(terms) -> tuple[str, list]:
         return "0", []
     parts, a = [], []
     for t in terms:
-        if t["chain"]:
-            parts.append("(instr(o.name_key, ?) > 0 AND o.chain=?)")
-            a += [t["term_key"], t["chain"]]
-        else:
-            parts.append("instr(o.name_key, ?) > 0")
-            a.append(t["term_key"])
+        p, pa = watchmatch.sql(t)
+        parts.append(p)
+        a += pa
     return "(CASE WHEN " + " OR ".join(parts) + " THEN 1 ELSE 0 END)", a
 
 
@@ -167,7 +178,8 @@ def offer_original(o) -> str | None:
 
 def ctx():
     return {"CATEGORIES": CATEGORIES, "image_url": image_url, "logo_url": logo_url, "SORT_LT": SORT_LT, "WHEN_LT": WHEN_LT, "flags_of": flags_of, "extra_of": extra_of,
-            "offer_original": offer_original, "today_iso": date.today().isoformat()}
+            "offer_original": offer_original, "today_iso": date.today().isoformat(), "ending_soon": ending_soon,
+            "ending_days": ending_days()}
 
 
 @bp.get("/")
@@ -283,23 +295,45 @@ def product_category(pid):
     return redirect(url_for("offers.product", pid=pid))
 
 
+VIEWS = {"zodis": "Pagal žodį", "tinklas": "Pagal tinklą"}
+
+
 @bp.get("/stebimi")
 def watch():
+    """Stebimi: grouped by watched word (as typed) or by chain – chains with the most watched offers first, each
+    offer once even when several words find it (pick the shop to drive to). The view is remembered (cookie)."""
+    from flask import make_response
+    view = request.args.get("view") or request.cookies.get("stebimi_view") or "zodis"
+    if view not in VIEWS:
+        view = "zodis"
     today = date.today()
     with db.session(settings()) as conn:
         terms = watch_terms(conn)
         where, a = current_where(today, "all")
         rows = conn.execute(f"SELECT o.*, i.title AS issue_title, i.files AS issue_files FROM offers o JOIN issues i ON i.id=o.issue_id WHERE {where}"
                             " ORDER BY o.price IS NULL, o.price", a).fetchall()
-    hits = {t["id"]: [r for r in rows if t["term_key"] in r["name_key"] and (not t["chain"] or t["chain"] == r["chain"])]
-            for t in terms}
-    return render_template("watch.html", terms=terms, hits=hits, **ctx())
+    found = [(r, watchmatch.matching_terms(terms, r["name_key"], r["chain"])) for r in rows]
+    found = [(r, ts) for r, ts in found if ts]
+    hits = {t["id"]: [r for r, ts in found if t in ts] for t in terms}
+    by_chain: dict[str, dict] = {}
+    for r, ts in found:
+        g = by_chain.setdefault(r["chain"], {"chain": r["chain"], "offers": [], "terms": {}})
+        g["offers"].append(r)
+        for t in ts:
+            g["terms"][t["term"]] = g["terms"].get(t["term"], 0) + 1
+    chains = sorted(by_chain.values(), key=lambda g: (-len(g["offers"]), CHAIN_NAMES[g["chain"]]))
+    resp = make_response(render_template("watch.html", terms=terms, hits=hits, chains=chains, view=view, views=VIEWS,
+                                         **ctx()))
+    if request.args.get("view") in VIEWS:
+        resp.set_cookie("stebimi_view", view, max_age=365 * 86400, samesite="Lax")
+    return resp
 
 
 @bp.post("/stebimi")
 def watch_add():
     term = (request.form.get("term") or "").strip()
     chain = request.form.get("chain") or None
+    exact = 1 if request.form.get("exact") == "1" else 0
     if chain and chain not in CHAIN_NAMES:
         chain = None
     key = fold(term)
@@ -311,12 +345,23 @@ def watch_add():
         return redirect(back)
     with db.session(settings()) as conn:
         with conn:
-            conn.execute("INSERT INTO watch(term,term_key,chain,created) VALUES(?,?,?,?) ON CONFLICT(term_key) DO NOTHING",
-                         (term, key, chain, db.now_iso()))
+            conn.execute("INSERT INTO watch(term,term_key,chain,created,exact) VALUES(?,?,?,?,?) ON CONFLICT(term_key) DO NOTHING",
+                         (term, key, chain, db.now_iso(), exact))
     mqtt_refresh()
-    flash(f"Stebima: „{term}“.", "ok")
+    flash(f"Stebima: „{term}“{' (tikslus žodis)' if exact else ''}.", "ok")
     safe = back.startswith("/") and not back.startswith("//")
     return redirect(back if safe else url_for("offers.watch"))
+
+
+@bp.post("/stebimi/<int:wid>/tikslus")
+def watch_exact(wid):
+    """Toggle "Tikslus žodis" of one watched word."""
+    exact = 1 if request.form.get("exact") == "1" else 0
+    with db.session(settings()) as conn:
+        with conn:
+            conn.execute("UPDATE watch SET exact=? WHERE id=?", (exact, wid))
+    mqtt_refresh()
+    return redirect(url_for("offers.watch"))
 
 
 @bp.post("/stebimi/<int:wid>/salinti")

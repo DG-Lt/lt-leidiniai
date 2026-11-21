@@ -164,6 +164,10 @@ MIGRATIONS: list[str] = [
     WHERE chain IN ('iki','lidl','norfa','rimi','vynoteka') AND status='parsed' AND files LIKE '%.pdf%'
         AND (valid_to IS NULL OR valid_to >= date('now'));
     """,
+    # 7 (0.8.1): watch list "Tikslus žodis" per word (whole words only); all words in any order is the code's rule
+    """
+    ALTER TABLE watch ADD COLUMN exact INTEGER NOT NULL DEFAULT 0;
+    """,
 ]
 
 
@@ -184,7 +188,12 @@ def migrate(conn: sqlite3.Connection) -> int:
     v = conn.execute("PRAGMA user_version").fetchone()[0]
     for i, sql in enumerate(MIGRATIONS[v:], start=v + 1):
         with conn:
-            conn.executescript(sql)
+            try:
+                conn.executescript(sql)
+            except sqlite3.OperationalError as e:
+                # a single ADD COLUMN migration run again on a database that already has the column
+                if "duplicate column name" not in str(e) or sql.count(";") != 1:
+                    raise
             conn.execute(f"PRAGMA user_version={i}")
     return conn.execute("PRAGMA user_version").fetchone()[0]
 

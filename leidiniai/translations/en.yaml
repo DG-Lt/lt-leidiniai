@@ -20,6 +20,9 @@ configuration:
   keep_images_weeks:
     name: Keep product pictures (weeks)
     description: Product crops older than this are deleted (offers and prices stay).
+  ending_soon_days:
+    name: Ending soon (days)
+    description: Offers ending within this many days (today included) get their end date highlighted; the "Besibaigiantys" filter shows only them. 0 = off.
   log_level:
     name: Log level
   picture_reader:
