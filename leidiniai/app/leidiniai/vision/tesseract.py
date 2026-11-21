@@ -114,3 +114,7 @@ def session(settings, log):
             o.extra["reader"] = "tesseract"
         return offers
     yield read_page
+
+
+def signature(settings) -> str:
+    return "tesseract|v1"

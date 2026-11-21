@@ -111,3 +111,20 @@ def iso_week_range(year: int, week: int, start_weekday: int = 0) -> tuple[date, 
     monday = date.fromisocalendar(year, week, 1)
     start = monday + timedelta(days=start_weekday)
     return start, start + timedelta(days=6)
+
+
+_MON = r"[A-Za-zĄČĘĖĮŠŲŪŽąčęėįšųūž]{3,}"
+_DASH = r"\s*[–—-]\s*"
+
+
+def offer_range(text: str, ref: date) -> tuple[date | None, date | None]:
+    """An offer's own dates as printed on it: 'LAPKRIČIO 19–21 d.', 'LAPKRIČIO 29 – GRUODŽIO 1 d.',
+    'lapkričio 23–25', '11.19–11.21', 'Iki 11.23'. ('LAPKRIČIO 19–21' → 'LAPKRIČIO 19 d. – LAPKRIČIO 21 d.')"""
+    t = re.sub(r"\(.*?\)", " ", text or "")
+    t = re.sub(rf"({_MON})\s+(\d{{1,2}}){_DASH}(\d{{1,2}})(?!\s*[.\d])(?:\s*d\b\.?)?",
+               lambda m: f"{m.group(1)} {m.group(2)} d. – {m.group(1)} {m.group(3)} d.", t)
+    t = re.sub(rf"({_MON})\s+(\d{{1,2}})(?!\s*d\b)(?=\s*(?:[–—-]|$))", r"\1 \2 d.", t)
+    t = re.sub(rf"({_MON})\s+(\d{{1,2}})\s*$", r"\1 \2 d.", t)
+    if not any(month_number(w) for w in re.findall(_MON, t)) and not re.search(r"\d{1,2}\.\d{1,2}", t):
+        return None, None
+    return parse_range(t, ref)

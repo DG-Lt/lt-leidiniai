@@ -6,7 +6,7 @@ External (`ollama_url` set): nothing is installed here; the model must already b
 Local: the Ollama runtime is downloaded into /data/ollama (the CPU part only: GPU libraries are skipped while
 unpacking, ~100 MB on disk; the download itself is the full package, ~1.5 GB) and the model is pulled into
 /data/ollama/models (~6 GB for 7B). `ollama serve` runs only while a leaflet is read (and during the first pull),
-at the lowest CPU priority, one request at a time, and unloads the model 2 minutes after the last page.
+at the lowest CPU priority, one request at a time, and unloads the model after every page (memory, see read_page).
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ import os
 import re
 import signal
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -29,16 +30,21 @@ SKIP_LIBS = ("lib/ollama/cuda_*", "lib/ollama/rocm*", "lib/ollama/vulkan*", "lib
 LOCAL_PORT = 11435  # not the usual 11434: never talk to some other Ollama by mistake
 PAGE_TIMEOUT = 1800  # CPU: 1–3 min a page expected; generous for a slow night
 
+PROMPT_VERSION = 2  # part of the saved page results' signature: a new prompt reads the pages again
+PICTURE_THREADS = 3  # CPU threads while reading pictures (the box has 4 cores / 8 threads; Ollama runs at nice 19)
+
 PROMPT = """This is one page of a Lithuanian supermarket discount leaflet ({chain}).
-List every product offer on the page. For each offer give:
-- name: the product name exactly as printed, in Lithuanian with its letters (ą č ę ė į š ų ū ž), including brand
-  and pack size if printed next to it ("Pienas DVARO, 2,5 % rieb., 1 l"). No invented words.
-- price: the big current price in euros as a number (1,99 € → 1.99). null when only a discount is printed.
-- old_price: the crossed-out / regular price in euros, or null.
-- discount: the discount badge as printed ("-25%", "1+1"), or null.
-- unit_price and unit: the price per kg / l / vnt. if printed ("1 kg – 5,98 €" → 5.98, "kg"), else null.
-- card_only: true when the price is only with a loyalty card or app.
-- box: [x0, y0, x1, y1] pixel coordinates of the offer (photo, name and price) on this image.
+List every product offer on the page, in reading order, each offer once. Keys of an offer, in this order; leave a key
+out when it is not printed:
+- bbox_2d: [x1, y1, x2, y2] pixel box of the whole offer (photo, name and price) on this image.
+- name: the product name exactly as printed, in Lithuanian with its letters (ą č ę ė į š ų ū ž), with brand and
+  pack size if printed next to it ("Pienas DVARO, 2,5 % rieb., 1 l"). No invented words.
+- price: the big current price in euros as a number (1,99 € → 1.99).
+- old: the crossed-out / regular price in euros.
+- disc: the discount badge as printed ("-25%", "1+1").
+- unit_price and unit: price per kg / l / vnt. when printed ("1 kg – 5,98 €" → 5.98 and "kg").
+- card: true when the price is only with a loyalty card or app.
+- dates: the offer's own dates when printed on it ("LAPKRIČIO 19–21 d."), not the leaflet's dates.
 Skip headings, store addresses, opening hours and adverts without a product price or discount.
 If the page has no offers, return an empty list."""
 
@@ -46,20 +52,25 @@ SCHEMA = {
     "type": "object",
     "properties": {"offers": {"type": "array", "items": {
         "type": "object",
-        "properties": {
+        "properties": {  # order matters: Qwen2.5-VL was trained to give bbox_2d first
+            "bbox_2d": {"type": "array", "items": {"type": "integer"}, "minItems": 4, "maxItems": 4},
             "name": {"type": "string"},
-            "price": {"type": ["number", "null"]},
-            "old_price": {"type": ["number", "null"]},
-            "discount": {"type": ["string", "null"]},
-            "unit_price": {"type": ["number", "null"]},
-            "unit": {"type": ["string", "null"]},
-            "card_only": {"type": "boolean"},
-            "box": {"type": ["array", "null"], "items": {"type": "number"}},
+            "price": {"type": "number"},
+            "old": {"type": "number"},
+            "disc": {"type": "string"},
+            "unit_price": {"type": "number"},
+            "unit": {"type": "string"},
+            "card": {"type": "boolean"},
+            "dates": {"type": "string"},
         },
-        "required": ["name", "price"],
+        "required": ["bbox_2d", "name"],
     }}},
     "required": ["offers"],
 }
+
+# llama-server writes a progress line every few seconds while answering (n_gen = …): 0.7.0's 200 KB log kept only
+# the last two pages. These lines are dropped; timings, errors and the rest stay.
+LOG_DROP = re.compile(r"\bn_gen\s*=|decoding image batch|image slice encoded|^\s*$")
 
 
 # --------------------------------------------------------------------------- local runtime
@@ -128,11 +139,11 @@ def start_local(settings, log) -> subprocess.Popen | None:
         return None
     d = settings.ollama_dir
     env = dict(os.environ, OLLAMA_HOST=f"127.0.0.1:{LOCAL_PORT}", OLLAMA_MODELS=str(d / "models"),
-               OLLAMA_KEEP_ALIVE="2m", OLLAMA_NUM_PARALLEL="1", OLLAMA_MAX_LOADED_MODELS="1",
+               OLLAMA_KEEP_ALIVE="0", OLLAMA_NUM_PARALLEL="1", OLLAMA_MAX_LOADED_MODELS="1",
                OLLAMA_NOPRUNE="1", HOME=str(d))
-    logf = open(d / "serve.log", "ab")
-    p = subprocess.Popen([str(_bin(settings)), "serve"], env=env, stdout=logf, stderr=subprocess.STDOUT,
+    p = subprocess.Popen([str(_bin(settings)), "serve"], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                          preexec_fn=lambda: os.nice(19), start_new_session=True)
+    threading.Thread(target=_copy_log, args=(p.stdout, d / "serve.log"), name="ollama-log", daemon=True).start()
     _pidfile(settings).write_text(str(p.pid))
     for _ in range(60):
         if _alive(url):
@@ -143,6 +154,15 @@ def start_local(settings, log) -> subprocess.Popen | None:
         time.sleep(1)
     p.kill()
     raise RuntimeError(f"Ollama did not start; see {d / 'serve.log'}")
+
+
+def _copy_log(stream, path: Path) -> None:
+    """Ollama's output → serve.log without llama-server's progress lines (LOG_DROP)."""
+    with open(path, "ab") as f:
+        for line in iter(stream.readline, b""):
+            if not LOG_DROP.search(line.decode("utf-8", "replace")):
+                f.write(line)
+                f.flush()
 
 
 def stop_local(settings, log, proc: subprocess.Popen | None = None) -> None:
@@ -246,8 +266,17 @@ def _cents(v, hi=100000) -> int | None:
     return c if c < hi else None
 
 
+def model_size(W: int, H: int) -> tuple[int, int]:
+    """The size Qwen2.5-VL sees: each side rounded to a multiple of 28 (its boxes are in these pixels)."""
+    return max(28, round(W / 28) * 28), max(28, round(H / 28) * 28)
+
+
 def offers_from_json(data: dict, pno: int, chain: str, size: tuple[int, int]) -> list[Offer]:
+    """The model's answer → offers. `crop` is the model's box in pixels of the page picture (snapped to the
+    product card later, see cells.py); `extra.dates_text` the offer's own dates as printed."""
     W, H = size
+    mw, mh = model_size(W, H)
+    sx, sy = W / mw, H / mh
     out = []
     for it in (data or {}).get("offers") or []:
         if not isinstance(it, dict):
@@ -257,8 +286,8 @@ def offers_from_json(data: dict, pno: int, chain: str, size: tuple[int, int]) ->
             continue
         o = Offer(chain=chain, name=name, page=pno)
         o.price = _cents(it.get("price"))
-        o.old_price = _cents(it.get("old_price"))
-        d = it.get("discount")
+        o.old_price = _cents(it.get("old", it.get("old_price")))
+        d = it.get("disc", it.get("discount"))
         if isinstance(d, str) and d.strip():
             o.discount_text = d.strip().replace("–", "-").replace(" ", "")
         o.unit_price = _cents(it.get("unit_price"))
@@ -272,28 +301,34 @@ def offers_from_json(data: dict, pno: int, chain: str, size: tuple[int, int]) ->
             if not o.discount_text:
                 continue  # neither price nor discount: not an offer
             o.kind = "badge"
-        o.card = bool(it.get("card_only"))
+        o.card = bool(it.get("card", it.get("card_only")))
         if o.card:
             o.card_text = "kortelė"
-        b = it.get("box")
+        dt = it.get("dates")
+        if isinstance(dt, str) and re.search(r"\d", dt):
+            o.extra["dates_text"] = dt.strip()[:80]
+        b = it.get("bbox_2d", it.get("box"))
         if isinstance(b, list) and len(b) == 4 and all(isinstance(v, (int, float)) for v in b):
-            x0, y0, x1, y1 = b
+            x0, y0, x1, y1 = b[0] * sx, b[1] * sy, b[2] * sx, b[3] * sy
             if 0 <= x0 < x1 <= W * 1.02 and 0 <= y0 < y1 <= H * 1.02 and (x1 - x0) * (y1 - y0) < 0.6 * W * H:
-                o.crop = {"x0": x0, "top": y0, "x1": min(x1, W), "bottom": min(y1, H)}
+                o.crop = {"x0": round(x0), "top": round(y0), "x1": round(min(x1, W)), "bottom": round(min(y1, H))}
         o.flags.append("vision")
         o.extra["reader"] = "ollama"
         out.append(finish(o))
     return out
 
 
-def read_page(url: str, model: str, img: Path, pno: int, chain: str, threads: int) -> list[Offer]:
+def read_page(url: str, model: str, img: Path, pno: int, chain: str, threads: int,
+              keep_alive: str | int = 0) -> list[Offer]:
+    """One page. keep_alive 0 (local): the model is unloaded after the page, which also drops llama-server's
+    prompt cache (0.7.0: +~200 MB per page, 8 GB allowed). Loading it again takes seconds; a page takes minutes."""
     from PIL import Image
     size = Image.open(img).size
     body = {
-        "model": model, "stream": False, "format": SCHEMA, "keep_alive": "2m",
+        "model": model, "stream": False, "format": SCHEMA, "keep_alive": keep_alive,
         "messages": [{"role": "user", "content": PROMPT.format(chain=chain),
                       "images": [base64.b64encode(img.read_bytes()).decode()]}],
-        "options": {"temperature": 0, "num_ctx": 8192, "num_predict": 4096, "num_thread": threads},
+        "options": {"temperature": 0, "num_ctx": 8192, "num_predict": 3072, "num_thread": threads},
     }
     r = requests.post(url + "/api/chat", json=body, timeout=(15, PAGE_TIMEOUT))
     r.raise_for_status()
@@ -306,6 +341,10 @@ def read_page(url: str, model: str, img: Path, pno: int, chain: str, threads: in
     return offers_from_json(data, pno, chain, size)
 
 
+def signature(settings) -> str:
+    return f"ollama|{settings.ollama_model}|p{PROMPT_VERSION}"
+
+
 @contextlib.contextmanager
 def session(settings, log):
     url = base_url(settings)
@@ -313,7 +352,10 @@ def session(settings, log):
     if not settings.ollama_url:
         proc = start_local(settings, log)
     try:
-        yield lambda img, pno, chain: read_page(url, settings.ollama_model, img, pno, chain, settings.threads)
+        threads = max(settings.threads, min(PICTURE_THREADS, (os.cpu_count() or 4) - 1))
+        # an external Ollama (a PC) keeps its model loaded between pages as usual
+        keep = 0 if not settings.ollama_url else "2m"
+        yield lambda img, pno, chain: read_page(url, settings.ollama_model, img, pno, chain, threads, keep)
     finally:
         if proc:
             stop_local(settings, log, proc)

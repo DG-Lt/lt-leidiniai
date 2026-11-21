@@ -20,7 +20,7 @@ from .logs import setup_logging, write_run_summary
 log = logging.getLogger("leidiniai.job")
 
 
-LEARNT_META = ("parser",)  # learnt while downloading (Rimi catalogue → catalogue_pdf): the listing does not know it
+LEARNT_META = ("parser", "reread")  # learnt while downloading (Rimi catalogue → catalogue_pdf) or set in the panel
 
 
 def merge_meta(stored: str | None, listed: dict) -> dict:
@@ -180,13 +180,78 @@ def run(chain: str, trigger: str, settings) -> dict:
     return summary
 
 
+def progress_line(**kw) -> None:
+    """The parent (schedule.Runner) reads these lines: activity sensor ('Šilas: puslapis 3/12')."""
+    print("PROGRESS " + json.dumps(kw, ensure_ascii=False), flush=True)
+
+
+def run_pictures(settings, trigger: str, issue_id: int | None = None) -> list[dict]:
+    """Read the image-only leaflets that wait for the picture reader (all, or one), one run record per chain.
+    Pages read earlier are not read again (vision_pages). Chain state (next check, last error) is not touched."""
+    from . import vision
+    conn = db.open_db(settings)
+    out = []
+    try:
+        if not vision.ready(settings):
+            log.info("Picture reading: the picture reader is not ready (%s)", settings.picture_reader)
+            return out
+        todo = pipeline.picture_issues(conn, issue_id)
+        if not todo:
+            log.info("Picture reading: no leaflet waits")
+            return out
+        log.info("Picture reading: %d leaflet(s) – %s", len(todo), ", ".join(f"{r['chain']} {r['key']}" for r in todo))
+        for chain in dict.fromkeys(r["chain"] for r in todo):
+            now = db.now_iso()
+            t0 = time.monotonic()
+            with conn:
+                run_id = conn.execute("INSERT INTO runs(chain,trigger,started) VALUES(?,?,?)",
+                                      (chain, f"pictures-{trigger}", now)).lastrowid
+            summary = {"run_id": run_id, "chain": chain, "trigger": f"pictures-{trigger}", "started": now,
+                       "issues_listed": 0, "new_issues": [], "downloaded": [], "skipped_expired": [], "warnings": [],
+                       "errors": [], "timings": {}}
+            for r in (x for x in todo if x["chain"] == chain):
+                def prog(page, pages, r=r):
+                    progress_line(chain=chain, issue_id=r["id"], title=r["title"], page=page, pages=pages)
+                pipeline.parse_stored(conn, settings, r["id"], "vision", summary, log, progress=prog)
+            if summary.get("parsed"):
+                from .store import recategorise
+                recategorise(conn)
+            status = "error" if summary["errors"] else "warning" if summary["warnings"] else "ok"
+            summary["timings"]["total_s"] = round(time.monotonic() - t0, 1)
+            summary["status"] = status
+            summary["finished"] = db.now_iso()
+            summary["http"] = {"requests": 0, "browser_pages": 0, "bytes": 0}
+            with conn:
+                conn.execute("UPDATE runs SET finished=?, status=?, summary=? WHERE id=?",
+                             (summary["finished"], status, json.dumps(summary, ensure_ascii=False), run_id))
+            try:
+                write_run_summary(settings, summary)
+            except Exception as e:
+                log.warning("could not write the run summary file: %s", e)
+            log.info("%s: picture reading run %d finished – %s (%s s)", chain, run_id, status,
+                     summary["timings"]["total_s"])
+            out.append(summary)
+    finally:
+        conn.close()
+    return out
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("chain")
+    ap.add_argument("chain", nargs="?")
     ap.add_argument("--trigger", default="manual")
+    ap.add_argument("--pictures", action="store_true", help="read the image-only leaflets that wait")
+    ap.add_argument("--issue", type=int, help="with --pictures: only this leaflet")
     a = ap.parse_args(argv)
     settings = config.load()
     setup_logging(settings, stdout_only=True)
+    if a.pictures:
+        runs = run_pictures(settings, a.trigger, a.issue)
+        st = "error" if any(r["status"] == "error" for r in runs) else "ok"
+        print("SUMMARY " + json.dumps({"run_id": runs[-1]["run_id"] if runs else None, "status": st}), flush=True)
+        return 0 if st != "error" else 1
+    if not a.chain:
+        ap.error("chain or --pictures")
     s = run(a.chain, a.trigger, settings)
     print("SUMMARY " + json.dumps({"run_id": s["run_id"], "status": s["status"]}), flush=True)
     return 0 if s["status"] != "error" else 1

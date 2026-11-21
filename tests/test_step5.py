@@ -63,6 +63,12 @@ class FakeRunner:
     def next_checks(self):
         return {"iki": "2026-11-20T03:30:00+02:00", "norfa": "2026-11-24T03:30:00+02:00"}
 
+    def request_pictures(self, trigger, issue_id=None):
+        self.requests.append(("pictures", trigger))
+
+    def activity(self):
+        return {"state": "laukia", "checking": None, "queued_checks": 0, "pictures": None, "pictures_queued": False}
+
 
 def seed(conn):
     now = "2026-11-19T03:30:00+02:00"
@@ -131,7 +137,9 @@ def test_discovery_payloads(settings):
     for topic, c in d.items():
         comp = topic.split("/")[1]
         assert c["default_entity_id"].startswith(comp + ".leidiniai_") and c["device"]["identifiers"] == ["leidiniai"]
-    assert len(d) == 2 + 6
+    assert len(d) == 2 + 6 + 4  # 0.8.0: activity, picture_reader, watch_hit, read_pictures
+    assert d["homeassistant/event/leidiniai/watch_hit/config"]["event_types"] == ["watch_hit"]
+    assert d["homeassistant/button/leidiniai/read_pictures/config"]["command_topic"] == mqtt.CMD_PICTURES
 
 
 def make_bridge(settings, runner=None):
@@ -152,8 +160,10 @@ def test_bridge_connect_publishes_everything(settings):
     assert c.connect_args == ("core-mosquitto", 1883) and c.auth == ("addons", "pw")
     assert c.will == ("leidiniai/status", "offline", True)
     b._on_connect(c, None, {}, 0, None)
-    assert set(c.subs) == {mqtt.CMD_CHECK, mqtt.HA_STATUS}
+    assert set(c.subs) == {mqtt.CMD_CHECK, mqtt.CMD_PICTURES, mqtt.HA_STATUS}
     assert c.last("leidiniai/status") == "online"
+    assert c.last("leidiniai/activity/state") == "laukia"
+    assert c.last("leidiniai/picture_reader/state") == "išjungtas"
     assert c.last("leidiniai/iki/leaflet/state") == "IKI leidinys Nr. 47"
     assert json.loads(c.last("leidiniai/iki/leaflet/attributes"))["valid_to"] == "2026-11-22"
     assert c.last("leidiniai/watched/state") == "2"

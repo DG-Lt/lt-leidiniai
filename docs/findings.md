@@ -90,3 +90,21 @@ Checked page by page against the week 46/47 files; regression pages in `tests/fi
 - Categories: shop category when it is specific, else a Lithuanian stem dictionary on the head noun (the last
   matching word of the name's first phrase), else a broad shop category, else "Kita". Unsorted on the test
   files: Lidl 14/233, Norfa 54/345, IKI 58/445.
+
+## Picture reader in practice (first Ollama run on the box, 2026-11-20/21 → 0.8.0)
+- **Šilas Nr. 23** (12 pages) with qwen2.5vl:7b on the i5-8350U, 2 threads, nice 19: 2 h 59 min, ~15 min/page
+  (prompt ~7.6 min at 5.6 tok/s for 2 575 tokens, answer 400–1 260 tokens at 2.4 tok/s, ~90 tokens per offer).
+  135 offers (116 priced, 19 discount-only). Names and prices good; **model boxes poor** (shifted, too small,
+  half of a neighbour).
+- The PDF pages are **992×1403 JPEGs**: 0.7 rendered them at 1600 px (no extra detail, 23 % more picture tokens).
+  Tesseract test at 1100 px lost 40–80 % of the words on dense pages → 0.8.0 uses the page's own size (≤ 1600).
+- The model sees each side rounded to a multiple of 28 (992×1403 → 980×1400); its `bbox_2d` is in those pixels.
+- Šilas prints offers on **white cards in a 3×4 grid over a grey wood background (≤ 241 per channel)**; card white
+  is ≥ 248. Card finder (`vision/cells.py`): 94 usable cards on pages 1–9 of Nr. 23 (3 pairs merged where a photo
+  bridges the gap → not used, ≥ 1.6× the median card); pages 10–12 (winter goods collage, "Verta paragauti")
+  have no cards → the model's box with a margin.
+- **3D akcija** (page 1): four offers valid only 3 days ("LAPKRIČIO 19–21 d. (Ketvirtadienį – šeštadienį)") –
+  read as the offer's own dates.
+- Memory: llama-server's prompt cache kept every page (~160–235 MB each, 8 GB limit) → RES 7.2 → 8.0 GB on Šilas.
+  0.8.0 unloads the model after each page (`keep_alive: 0`).
+- The Ollama log was 200 KB of `n_gen = …` progress lines (every 3 s) → filtered.

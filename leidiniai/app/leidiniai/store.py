@@ -51,6 +51,8 @@ def save_offers(conn, issue, offers: list[Offer], images: dict[int, str] | None 
         conn.execute("DELETE FROM offers WHERE issue_id=?", (issue["id"],))
         for seq, o in enumerate(offers):
             key = fold(o.name)
+            # search and the watch list look at the short name and the description (Aprašymas) together
+            okey = fold(f"{o.name} {o.extra.get('desc') or ''}")
             ident = product_ident(o, issue["id"], seq)
             image = images.get(seq) or o.image_url
             pid, cat = upsert_product(conn, o, ident, key, image, now, clf)
@@ -63,7 +65,7 @@ def save_offers(conn, issue, offers: list[Offer], images: dict[int, str] | None 
                 "INSERT INTO offers(issue_id,product_id,chain,seq,page,kind,name,name_key,price,old_price,discount_pct,"
                 "discount_text,unit_price,unit,quantity,card,card_text,valid_from,valid_to,category,ext_id,ext_category,"
                 "image,flags,extra) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                (issue["id"], pid, o.chain, seq, o.page, o.kind, o.name, key, o.price, o.old_price, o.discount_pct,
+                (issue["id"], pid, o.chain, seq, o.page, o.kind, o.name, okey, o.price, o.old_price, o.discount_pct,
                  o.discount_text, o.unit_price, o.unit, o.quantity, int(o.card), o.card_text, vf, vt, cat,
                  o.ext_id, o.ext_category, image, json.dumps(o.flags), json.dumps(extra, ensure_ascii=False)))
             flags.update(o.flags)

@@ -22,9 +22,31 @@ def _current(i, today: str) -> bool:
     return (not i["valid_from"] or i["valid_from"] <= today) and (not i["valid_to"] or i["valid_to"] >= today)
 
 
+SHORT_SERIES = {"maisto-prekiu-pasiulymai": "Maisto prekės", "ne-maisto-prekiu-pasiulymai": "Ne maisto prekės",
+                "pasiulymai": "Pasiūlymai", "akcijos": "Akcijos svetainėje", "gerimu-leidinys": "Gėrimai",
+                "maisto-leidinys": "Maisto leidinys"}
+SHORT_MAX = 28
+
+
+def short_title(i) -> str:
+    """Leaflet name short enough for a dashboard table: 'MAISTO PREKIŲ PASIŪLYMAI – Nuo lapkričio 23 d.' → 'Maisto
+    prekės', 'Pasiūlymai (160) iki 2026-12-07' → 'Pasiūlymai', 'Leidinys Nr. 23. Kainos galioja …' → 'Leidinys Nr. 23'."""
+    import re
+    if i["series"] in SHORT_SERIES:
+        t = SHORT_SERIES[i["series"]]
+    else:
+        t = re.split(r"\s+[–—-]\s+|\.\s+(?=[A-ZĄČĘĖĮŠŲŪŽ][a-ząčęėįšųūž])|\s+\(", i["title"] or "", maxsplit=1)[0].strip(" .")
+        if t.isupper():
+            t = t[:1] + t[1:].lower()
+    if i["number"] and i["series"] in SHORT_SERIES and i["chain"] != "lidl":
+        t = f"{t} Nr. {i['number']}"
+    return t if len(t) <= SHORT_MAX else t[:SHORT_MAX - 1].rstrip() + "…"
+
+
 def _leaflet(i) -> dict:
-    return {"title": i["title"], "series": i["series"], "number": i["number"], "valid_from": i["valid_from"],
-            "valid_to": i["valid_to"], "offers": i["offers"], "status": i["status"], "url": i["source_url"]}
+    return {"title": i["title"], "short_title": short_title(i), "series": i["series"], "number": i["number"],
+            "valid_from": i["valid_from"], "valid_to": i["valid_to"], "offers": i["offers"], "status": i["status"],
+            "url": i["source_url"]}
 
 
 def chain_leaflet(conn, chain: str, today: date) -> tuple[str, dict]:
@@ -41,6 +63,7 @@ def chain_leaflet(conn, chain: str, today: date) -> tuple[str, dict]:
     main = cur[0] if cur else None
     attrs = {
         "chain": CHAIN_NAMES[chain],
+        "short_title": short_title(main) if main else None,
         "valid_from": main["valid_from"] if main else None,
         "valid_to": main["valid_to"] if main else None,
         "offers": main["offers"] if main else None,
@@ -122,3 +145,51 @@ def leaflets_to_announce(conn, today: date, announced: set[int]) -> list[dict]:
             continue
         out.append({"issue_id": r["id"], "chain": r["chain"], "chain_name": CHAIN_NAMES[r["chain"]], **_leaflet(r)})
     return out
+
+
+def watch_hit_key(r) -> str:
+    """Same offer read again (re-parse, re-read) = same key: no second event."""
+    return f"{r['issue_id']}:{r['name_key']}:{r['price']}"
+
+
+def watch_hits(conn, today: date) -> list[dict]:
+    """Watched offers valid today or later from leaflets read after the watch term was added, newest leaflet last.
+    Each: one event.leidiniai_watch_hit (mqtt.Bridge.announce_watch_hits)."""
+    t = today.isoformat()
+    terms = conn.execute("SELECT * FROM watch").fetchall()
+    if not terms:
+        return []
+    rows = conn.execute("SELECT o.*, i.title AS issue_title, i.parsed_at FROM offers o JOIN issues i ON i.id=o.issue_id"
+                        " WHERE i.status='parsed' AND (o.valid_to IS NULL OR o.valid_to >= ?) ORDER BY i.id, o.seq",
+                        (t,)).fetchall()
+    out, seen = [], set()
+    for r in rows:
+        for w in terms:
+            if w["term_key"] in r["name_key"] and (not w["chain"] or w["chain"] == r["chain"]):
+                k = watch_hit_key(r)
+                if k not in seen and (r["parsed_at"] or "") >= (w["created"] or ""):
+                    seen.add(k)
+                    out.append({"key": k, "term": w["term"], "chain": r["chain"], "chain_name": CHAIN_NAMES[r["chain"]],
+                                "name": r["name"], "price": eur(r["price"]), "old_price": eur(r["old_price"]),
+                                "discount": r["discount_text"] or (f"-{r['discount_pct']}%" if r["discount_pct"] else None),
+                                "card": bool(r["card"]), "valid_from": r["valid_from"], "valid_to": r["valid_to"],
+                                "leaflet": r["issue_title"], "product_id": r["product_id"],
+                                "path": f"/produktas/{r['product_id']}"})
+                break
+    return out
+
+
+def picture_reader(settings) -> tuple[str, dict]:
+    """sensor.leidiniai_picture_reader: state in Lithuanian, the reader's own message as attribute
+    ('atsisiunčiamas modelis qwen2.5vl:7b 40%')."""
+    from . import vision
+    st = vision.read_status(settings)
+    if settings.picture_reader == "none":
+        return "išjungtas", {"reader": "none", "message": "išjungtas (parinktis picture_reader)"}
+    state = {"ready": "paruoštas", "preparing": "ruošiamas", "error": "klaida", "off": "išjungtas"}.get(
+        st.get("state"), "nežinomas")
+    if state == "paruoštas" and st.get("signature") != vision._signature(settings):
+        state = "ruošiamas"
+    return state, {"reader": settings.picture_reader, "model": settings.ollama_model
+                   if settings.picture_reader == "ollama" else None,
+                   "external": bool(settings.ollama_url), "message": st.get("message"), "updated": st.get("updated")}

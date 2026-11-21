@@ -11,7 +11,13 @@
     {% if o.card %}<span class="badge card" title="{{ o.card_text or '' }}">kortelė</span>{% endif %}
     {% if watched %}<span class="badge watch" title="Stebima">★</span>{% endif %}
   </div>
-  <a class="name" href="{{ url_for('offers.product', pid=o.product_id) }}">{{ o.name or '(pavadinimas neatpažintas)' }}</a>
+  {% set fl = flags_of(o) %}
+  {% if not o.name or 'weak_name' in fl or 'no_name' in fl %}
+    {% set orig = offer_original(o) %}
+    <span class="name muted" title="{{ o.name or '' }}"><a class="name" href="{{ url_for('offers.product', pid=o.product_id) }}">pavadinimas neatpažintas</a>{% if o.page %} – {% if orig %}<a href="{{ orig }}" target="_blank" rel="noopener">žr. leidinio p. {{ o.page }}</a>{% else %}žr. leidinio p. {{ o.page }}{% endif %}{% endif %}</span>
+  {% else %}
+  <a class="name" href="{{ url_for('offers.product', pid=o.product_id) }}">{{ o.name }}</a>
+  {% endif %}
   <div>
     {% if o.price is not none %}<span class="price">{{ o.price|money }}</span>{% endif %}
     {% if o.old_price %}<span class="old">{{ o.old_price|money }}</span>{% endif %}

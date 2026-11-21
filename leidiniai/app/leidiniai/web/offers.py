@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from datetime import date
+from pathlib import Path
 
 from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, send_from_directory, url_for
 
@@ -119,7 +120,7 @@ def query_offers(conn, args, today: date):
     if f["top"]:  # "Stebimi viršuje": watched offers first, each group in the chosen order; filters unchanged
         expr, oa = watched_sql(watch_terms(conn))
         order = f"{expr} DESC, {order}"
-    rows = conn.execute(f"SELECT o.*, i.title AS issue_title, i.source_url {base} ORDER BY {order}"
+    rows = conn.execute(f"SELECT o.*, i.title AS issue_title, i.source_url, i.files AS issue_files {base} ORDER BY {order}"
                         f" LIMIT {PAGE_SIZE} OFFSET {(page - 1) * PAGE_SIZE}", a + oa).fetchall()
     w2, a2 = _where(f, today, with_chain=False)
     counts = {r[0]: r[1] for r in conn.execute(
@@ -156,9 +157,17 @@ def logo_url(chain: str) -> str | None:
     return url_for("offers.logo", chain=chain, v=int(p.stat().st_mtime)) if p else None
 
 
+def offer_original(o) -> str | None:
+    """Offer row (with issue_files) → link to its leaflet page."""
+    try:
+        return original_link({"id": o["issue_id"], "files": o["issue_files"]}, o["page"])
+    except (KeyError, IndexError):
+        return None
+
+
 def ctx():
     return {"CATEGORIES": CATEGORIES, "image_url": image_url, "logo_url": logo_url, "SORT_LT": SORT_LT, "WHEN_LT": WHEN_LT, "flags_of": flags_of, "extra_of": extra_of,
-            "today_iso": date.today().isoformat()}
+            "offer_original": offer_original, "today_iso": date.today().isoformat()}
 
 
 @bp.get("/")
@@ -195,14 +204,57 @@ def image(path):
     return send_from_directory(d, path, max_age=7 * 24 * 3600)
 
 
+def original_link(issue_row, page: int | None) -> str | None:
+    """Link to the stored leaflet file at a page (PDF '#page=N', or the page picture) while it is kept
+    (keep_pdf_weeks); None when the files are gone."""
+    try:
+        files = json.loads(issue_row["files"] or "[]")
+    except (ValueError, KeyError, IndexError):
+        return None
+    files = [f for f in files if f.get("path") and Path(f["path"]).exists()]
+    if not files:
+        return None
+    if any(f["name"].lower().endswith(".pdf") for f in files):
+        return url_for("offers.original", iid=issue_row["id"]) + (f"#page={page}" if page else "")
+    return url_for("offers.original", iid=issue_row["id"], p=page or 1)
+
+
+@bp.get("/leidinys/<int:iid>/originalas")
+def original(iid):
+    """The stored leaflet file: the PDF (the browser opens it at '#page=N'), or page picture `p` of a leaflet made
+    of pictures (Vynoteka drinks)."""
+    from flask import send_file
+    with db.session(settings()) as conn:
+        r = conn.execute("SELECT files FROM issues WHERE id=?", (iid,)).fetchone()
+    if not r:
+        abort(404)
+    root = settings().pdf_dir.resolve()
+    files = [f for f in json.loads(r["files"] or "[]") if f.get("path")]
+    files = [f for f in files if Path(f["path"]).resolve().is_relative_to(root) and Path(f["path"]).exists()]
+    pdf = next((f for f in files if f["name"].lower().endswith(".pdf")), None)
+    if pdf:
+        return send_file(pdf["path"], mimetype="application/pdf", download_name=pdf["name"], max_age=3600)
+    pics = sorted((f for f in files if f["name"].lower().endswith((".jpg", ".jpeg", ".png", ".webp"))),
+                  key=lambda f: f["name"])
+    try:
+        n = int(request.args.get("p") or 1)
+    except ValueError:
+        n = 1
+    if not pics or not 1 <= n <= len(pics):
+        abort(404)
+    return send_file(pics[n - 1]["path"], max_age=3600)
+
+
 @bp.get("/produktas/<int:pid>")
 def product(pid):
     with db.session(settings()) as conn:
         p = conn.execute("SELECT * FROM products WHERE id=?", (pid,)).fetchone()
         if not p:
             abort(404)
-        hist = conn.execute("SELECT o.*, i.title AS issue_title, i.number, i.source_url FROM offers o JOIN issues i ON i.id=o.issue_id"
+        hist = conn.execute("SELECT o.*, i.title AS issue_title, i.number, i.source_url, i.files AS issue_files"
+                            " FROM offers o JOIN issues i ON i.id=o.issue_id"
                             " WHERE o.product_id=? ORDER BY COALESCE(o.valid_from, i.first_seen) DESC, o.id DESC", (pid,)).fetchall()
+        originals = {h["id"]: original_link({"id": h["issue_id"], "files": h["issue_files"]}, h["page"]) for h in hist}
         same = []
         if p["name_key"] and not p["ident"].startswith("~"):
             same = conn.execute("SELECT p.*, (SELECT MIN(o.price) FROM offers o WHERE o.product_id=p.id AND (o.valid_to IS NULL OR o.valid_to>=?))"
@@ -212,8 +264,9 @@ def product(pid):
     prices = [h["price"] for h in hist if h["price"] is not None]
     stats = {"min": min(prices) if prices else None, "max": max(prices) if prices else None, "n": len(hist)}
     key_hint = (p["name_key"] or "").split()[0] if p["name_key"] else ""
-    return render_template("product.html", p=p, hist=hist, same=same, stats=stats, key_hint=key_hint,
-                           is_watched=watched(p["name_key"], p["chain"], terms), **ctx())
+    desc = next((extra_of(h).get("desc") for h in hist if extra_of(h).get("desc")), None)
+    return render_template("product.html", p=p, hist=hist, same=same, stats=stats, key_hint=key_hint, desc=desc,
+                           originals=originals, is_watched=watched(p["name_key"], p["chain"], terms), **ctx())
 
 
 @bp.post("/produktas/<int:pid>/kategorija")
@@ -236,7 +289,7 @@ def watch():
     with db.session(settings()) as conn:
         terms = watch_terms(conn)
         where, a = current_where(today, "all")
-        rows = conn.execute(f"SELECT o.*, i.title AS issue_title FROM offers o JOIN issues i ON i.id=o.issue_id WHERE {where}"
+        rows = conn.execute(f"SELECT o.*, i.title AS issue_title, i.files AS issue_files FROM offers o JOIN issues i ON i.id=o.issue_id WHERE {where}"
                             " ORDER BY o.price IS NULL, o.price", a).fetchall()
     hits = {t["id"]: [r for r in rows if t["term_key"] in r["name_key"] and (not t["chain"] or t["chain"] == r["chain"])]
             for t in terms}

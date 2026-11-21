@@ -20,23 +20,60 @@ MAX_PARSE_ATTEMPTS = 3
 
 def after_download(conn, settings, issue_id, info, summary, log) -> None:
     if info.parser == "vision":
+        # picture leaflets are never read inside a chain check (hours with Ollama): they wait for the picture
+        # reading after the night's checks, or for "Skaityti paveikslėlius dabar"
         from . import vision
-        if not vision.ready(settings):
-            with conn:
-                conn.execute("UPDATE issues SET status='waiting_parser' WHERE id=?", (issue_id,))
-            log.info("%s %s: image-only leaflet, waits for the picture reader (option picture_reader: %s, %s)",
-                     info.chain, info.key, settings.picture_reader,
-                     vision.read_status(settings).get("message") or "not ready")
-            return
+        with conn:
+            conn.execute("UPDATE issues SET status='waiting_parser' WHERE id=?", (issue_id,))
+        log.info("%s %s: image-only leaflet, waits for the picture reading (%s)", info.chain, info.key,
+                 "at night" if vision.ready(settings) else
+                 f"picture_reader: {settings.picture_reader}, {vision.read_status(settings).get('message') or 'not ready'}")
+        return
     parse_stored(conn, settings, issue_id, info.parser, summary, log)
+
+
+def issue_parser(row) -> str:
+    try:
+        meta = json.loads(row["meta"] or "{}")
+    except ValueError:
+        meta = {}
+    return meta.get("parser") or parser_of(row["chain"])
+
+
+def picture_issues(conn, issue_id: int | None = None) -> list:
+    """Image-only leaflets waiting for the picture reader (or whose reading failed, up to 3 tries), oldest first."""
+    rows = conn.execute("SELECT * FROM issues WHERE (status IN ('waiting_parser','parse_failed')"
+                        "   OR (status='parsed' AND json_extract(meta, '$.reread')))"
+                        " AND parse_attempts < ? AND (valid_to IS NULL OR valid_to >= ?) ORDER BY id",
+                        (MAX_PARSE_ATTEMPTS, date.today().isoformat())).fetchall()
+    rows = [r for r in rows if issue_parser(r) == "vision"]
+    return [r for r in rows if issue_id is None or r["id"] == issue_id]
+
+
+def request_reread(conn, issue_id: int) -> bool:
+    """"Skaityti iš naujo": forget the saved page results of a picture leaflet and read it at the next picture
+    reading. Its offers stay visible until the new reading is saved."""
+    r = conn.execute("SELECT * FROM issues WHERE id=?", (issue_id,)).fetchone()
+    if not r or issue_parser(r) != "vision" or r["status"] not in ("parsed", "parse_failed", "waiting_parser"):
+        return False
+    meta = json.loads(r["meta"] or "{}")
+    if r["status"] == "parsed":
+        meta["reread"] = True
+    with conn:
+        conn.execute("DELETE FROM vision_pages WHERE issue_id=?", (issue_id,))
+        conn.execute("UPDATE issues SET parse_attempts=0, meta=?, status=CASE WHEN status='parse_failed'"
+                     " THEN 'waiting_parser' ELSE status END WHERE id=?", (json.dumps(meta, ensure_ascii=False), issue_id))
+    return True
 
 
 def parser_of(chain: str) -> str:
     return {"maxima": "maxima", "rimi": "rimi", "silas": "vision", "vynoteka": "vynoteka"}.get(chain, "pdf")
 
 
-def parse_stored(conn, settings, issue_id: int, parser: str | None, summary: dict, log) -> bool:
-    """Parse an issue from its stored files. Returns True when offers were saved."""
+def parse_stored(conn, settings, issue_id: int, parser: str | None, summary: dict, log,
+                 progress=lambda page, pages: None) -> bool:
+    """Parse an issue from its stored files. Returns True when offers were saved. `progress(page, pages)`: picture
+    leaflets report each page."""
     issue = conn.execute("SELECT * FROM issues WHERE id=?", (issue_id,)).fetchone()
     chain = issue["chain"]
     files = json.loads(issue["files"] or "[]")
@@ -60,7 +97,7 @@ def parse_stored(conn, settings, issue_id: int, parser: str | None, summary: dic
                 log.info("%s %s: image-only leaflet, the picture reader is not ready", chain, issue["key"])
                 return False
             try:
-                offers, images = vision.parse_issue(settings, issue, files, log)
+                offers, images = vision.parse_issue(settings, issue, files, log, conn=conn, progress=progress)
             except vision.NoPictures as e:
                 with conn:
                     conn.execute("UPDATE issues SET status='waiting_parser', parse_attempts=parse_attempts-1"
@@ -73,9 +110,10 @@ def parse_stored(conn, settings, issue_id: int, parser: str | None, summary: dic
         if parser in ("pdf", "catalogue_pdf", "vynoteka"):
             images = render_issue_crops(settings, issue, files, offers, log)
         counts = store.save_offers(conn, issue, offers, images)
+        meta.pop("reread", None)
         with conn:
-            conn.execute("UPDATE issues SET status='parsed', offers=?, parsed_at=?, error=NULL WHERE id=?",
-                         (len(offers), db.now_iso(), issue_id))
+            conn.execute("UPDATE issues SET status='parsed', offers=?, parsed_at=?, error=NULL, meta=? WHERE id=?",
+                         (len(offers), db.now_iso(), json.dumps(meta, ensure_ascii=False), issue_id))
         entry = {"key": issue["key"], **counts, "images": len(images),
                  "parse_s": round(t_parse, 1), "seconds": round(time.monotonic() - t0, 1)}
         summary.setdefault("parsed", []).append(entry)
@@ -92,8 +130,10 @@ def parse_stored(conn, settings, issue_id: int, parser: str | None, summary: dic
             summary["warnings"].append(f"{issue['key']}: only {counts['named']}/{counts['offers']} offers have a name")
         return bool(offers)
     except Exception as e:
+        # a failed re-reading keeps the earlier offers on show
+        st = "parsed" if meta.get("reread") and issue["status"] == "parsed" else "parse_failed"
         with conn:
-            conn.execute("UPDATE issues SET status='parse_failed', error=? WHERE id=?", (f"parse: {e}"[:500], issue_id))
+            conn.execute("UPDATE issues SET status=?, error=? WHERE id=?", (st, f"parse: {e}"[:500], issue_id))
         summary["errors"].append(f"{issue['key']}: parse failed: {e}")
         log.error("%s %s: parse failed: %s", chain, issue["key"], e)
         log.debug(traceback.format_exc())
@@ -126,14 +166,14 @@ def render_issue_crops(settings, issue, files, offers, log) -> dict[int, str]:
 
 
 def retry_parses(conn, settings, chain: str, summary: dict, log) -> None:
-    """Issues downloaded but not parsed (crash, parser bug fixed by an update, picture reader now ready):
-    parse from the stored files."""
-    from . import vision
-    states = ("downloaded", "parse_failed", "waiting_parser") if vision.ready(settings) else ("downloaded", "parse_failed")
-    rows = conn.execute(f"SELECT id, key, valid_to FROM issues WHERE chain=? AND status IN ({','.join('?' * len(states))})"
-                        " AND parse_attempts < ?", (chain, *states, MAX_PARSE_ATTEMPTS)).fetchall()
+    """Issues downloaded but not parsed (crash, parser bug fixed by an update): parse from the stored files.
+    Picture leaflets are left to the picture reading (job.run_pictures)."""
+    rows = conn.execute("SELECT * FROM issues WHERE chain=? AND status IN ('downloaded','parse_failed')"
+                        " AND parse_attempts < ?", (chain, MAX_PARSE_ATTEMPTS)).fetchall()
     for r in rows:
         if r["valid_to"] and r["valid_to"] < date.today().isoformat():
+            continue
+        if issue_parser(r) == "vision":
             continue
         log.info("%s %s: parsing the stored files again", chain, r["key"])
         parse_stored(conn, settings, r["id"], None, summary, log)
