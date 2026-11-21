@@ -18,7 +18,12 @@ Open the **Leidiniai** panel in the sidebar. Options are explained in the Config
   search and the watch list look at both.
   The details page links to the **original leaflet at the offer's page** (while the file is kept, `keep_pdf_weeks`)
   and to the leaflet on the shop's site; click the picture to enlarge it.
-- **Stebimi** – the watch list: words to look for in every new leaflet, with the matching offers.
+  **Besibaigiantys** shows only offers ending within `ending_soon_days` (default 3, today included); their end
+  date is highlighted everywhere.
+- **Stebimi** – the watch list: words to look for in every new leaflet, with the matching offers. All words must be
+  in the name, in any order ("Natura aliejus" finds "Saulėgrąžų aliejus NATURA"); **Tikslus žodis** per word
+  matches whole words only. **Pagal žodį** groups by word, **Pagal tinklą** by shop (most watched offers first – the
+  shop worth the trip).
 - **Leidiniai** – leaflets found, their state, the last checks (click one for its summary), what runs now, a
   "check now" button, **Skaityti paveikslėlius dabar** and, on a picture leaflet, **Skaityti iš naujo** (see
   Picture reader).
@@ -45,13 +50,13 @@ All entities belong to the device **Leidiniai**:
 |---|---|
 | `sensor.leidiniai_<chain>_leaflet` (iki, lidl, maxima, norfa, rimi, silas, vynoteka) | title of the leaflet valid today; attributes `short_title` (fits a table: "Maisto prekės", "Leidinys Nr. 23"), `valid_from`, `valid_to`, `offers`, `url`, `current`, `upcoming` (each with `short_title` too), `last_check`, `last_error` |
 | `event.leidiniai_new_leaflet` | fires `new_leaflet` once per leaflet that is ready to look at, with `chain`, `chain_name`, `title`, `valid_from`, `valid_to`, `offers`, `url` |
-| `sensor.leidiniai_watched_on_sale` | how many watched (Stebimi) offers are valid today; attribute `items` (name, chain, price €, old price, discount, card, valid to – up to 40) |
+| `sensor.leidiniai_watched_on_sale` | how many watched (Stebimi) offers are valid today; attributes `items` (name, chain, price €, old price, discount, card, valid to, `ending_soon`, `terms` – up to 40), `by_chain` (offers per shop, most first), `by_term`, `ending_soon` (count) |
 | `binary_sensor.leidiniai_problem` | on when a check or a leaflet failed; attribute `problems` |
 | `button.leidiniai_check_now` | queues a check of all chains |
 | `sensor.leidiniai_last_run`, `sensor.leidiniai_next_check` | time of the last finished / next check |
 | `sensor.leidiniai_activity` | what runs now: `laukia`, `tikrinamas IKI`, `Šilas: puslapis 3/12`, `paveikslėliai laukia eilėje` (several joined with "; "); attributes `checking`, `queued_checks`, `pictures` (chain, title, page, pages) |
 | `sensor.leidiniai_picture_reader` | `paruoštas`, `ruošiamas`, `klaida` or `išjungtas`; attribute `message` (e.g. "atsisiunčiamas modelis qwen2.5vl:7b 40%"), `model`, `updated` |
-| `event.leidiniai_watch_hit` | fires `watch_hit` once per new watched offer (from a leaflet read after the word was added to Stebimi): `term`, `chain_name`, `name`, `price`, `old_price`, `discount`, `card`, `valid_from`, `valid_to`, `leaflet`, `url` (the offer's page in this panel) |
+| `event.leidiniai_watch_hit` | fires `watch_hit` once per new watched offer (from a leaflet that first appeared after the word was added to Stebimi; reading it again does not repeat it): `term`, `chain_name`, `name`, `price`, `old_price`, `discount`, `card`, `valid_from`, `valid_to`, `leaflet`, `url` (the offer's page in this panel) |
 | `button.leidiniai_read_pictures` | reads the picture leaflets that wait now instead of at night |
 
 Example – a phone notification for each watched offer (the event entity's own trigger, HA 2026.7+):
@@ -127,8 +132,9 @@ expect roughly 10–15 minutes per page: Šilas (12 pages) about 2–3 hours, th
 about 4–5 hours.
 
 **Each page is saved as soon as it is read.** After a restart or an update the reading continues from the next
-page – at once if it is still night, otherwise at the next night or with the button. **Skaityti iš naujo** reads a
-leaflet again from the first page (e.g. after an update of the reader); its offers stay on show until then.
+page – at once if it is still night, otherwise at the next night or with the button. **Skaityti iš naujo** marks a
+leaflet to be read again from the first page (e.g. after an update of the reader) – at night, or at once with the
+button; its offers stay on show until then.
 
 **Memory.** The local model (~6 GB) is unloaded after every page, which also clears llama-server's prompt cache
 (0.7.0 grew ~200 MB per page). Loading it again takes seconds.

@@ -38,7 +38,7 @@
   <tr><th>Galioja</th><th>Leidinys</th><th>Pavadinimas leidinyje</th><th class="num">Kaina</th><th class="num">Buvo</th><th>Nuolaida</th><th class="num">Vieneto kaina</th></tr>
   {% for h in hist %}
   <tr>
-    <td>{{ h.valid_from|day }} – {{ h.valid_to|day }}</td>
+    <td>{{ h.valid_from|day }} – {% if ending_soon(h.valid_to) %}<span class="ending" title="Baigiasi per {{ ending_days }} d.">{{ h.valid_to|day }}</span>{% else %}{{ h.valid_to|day }}{% endif %}</td>
     <td>{% if h.source_url %}<a href="{{ h.source_url }}" target="_blank" rel="noopener">{{ h.issue_title }}</a>{% else %}{{ h.issue_title }}{% endif %}{% if h.page %} {% set orig = originals.get(h.id) %}{% if orig %}<a href="{{ orig }}" target="_blank" rel="noopener" title="Originalus leidinys šiame puslapyje">p. {{ h.page }}</a>{% else %}<span class="muted">p. {{ h.page }}</span>{% endif %}{% endif %}</td>
     <td>{{ h.name }}</td>
     <td class="num">{{ h.price|money }}</td>

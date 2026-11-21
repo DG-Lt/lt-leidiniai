@@ -133,18 +133,16 @@ def read_pictures():
 
 @bp.post("/leidinys/<int:iid>/skaityti-is-naujo")
 def reread(iid):
-    """"Skaityti iš naujo": read a picture leaflet again from the first page (e.g. after a reader update).
+    """"Skaityti iš naujo": mark a picture leaflet to be read again from the first page (e.g. after a reader
+    update). Read at night, or at once with "Skaityti paveikslėlius dabar" (0.8.1: no longer starts by itself).
     Its offers stay until the new reading is saved."""
-    from .. import db, vision
+    from .. import db
     from ..pipeline import request_reread
     with db.session(settings()) as conn:
         ok = request_reread(conn, iid)
-    runner = current_app.config.get("RUNNER")
     if not ok:
         flash("Šio leidinio iš naujo perskaityti negalima.", "err")
-    elif not vision.ready(settings()):
-        flash("Pažymėta skaityti iš naujo – kai paveikslėlių skaitytuvas bus paruoštas.", "ok")
-    elif runner:
-        runner.request_pictures("manual", iid)
-        flash("Leidinys bus perskaitytas iš naujo – prasidės, kai baigsis tikrinimai. Iki tol rodomi seni pasiūlymai.", "ok")
+    else:
+        flash("Pažymėta skaityti iš naujo – bus perskaitytas naktį arba paspaudus „Skaityti paveikslėlius dabar“."
+              " Iki tol rodomi seni pasiūlymai.", "ok")
     return redirect(url_for("ui.leaflets"))

@@ -5,7 +5,7 @@ Prices go out in euros (float, 2 decimals); dates as ISO strings; text as printe
 from __future__ import annotations
 
 import json
-from datetime import date
+from datetime import date, timedelta
 
 from . import CHAIN_NAMES, db
 
@@ -78,8 +78,14 @@ def chain_leaflet(conn, chain: str, today: date) -> tuple[str, dict]:
     return state, attrs
 
 
-def watched_on_sale(conn, today: date, mark_hits: bool = False) -> tuple[int, dict]:
-    """Offers valid today whose name matches a watch term (plain-letter substring, optional chain)."""
+def ending_soon(valid_to: str | None, today: date, days: int) -> bool:
+    """The offer ends within `days` days (today included): highlighted, "Besibaigiantys" filter (0.8.1)."""
+    return bool(valid_to) and today.isoformat() <= valid_to <= (today + timedelta(days=days)).isoformat()
+
+
+def watched_on_sale(conn, today: date, mark_hits: bool = False, ending_days: int = 3) -> tuple[int, dict]:
+    """Offers valid today whose name matches a watch term (watchmatch: every word, any order; Tikslus žodis)."""
+    from . import watchmatch
     t = today.isoformat()
     terms = conn.execute("SELECT * FROM watch ORDER BY term").fetchall()
     if not terms:
@@ -88,24 +94,28 @@ def watched_on_sale(conn, today: date, mark_hits: bool = False) -> tuple[int, di
         "SELECT o.*, i.title AS issue_title FROM offers o JOIN issues i ON i.id=o.issue_id"
         " WHERE i.status='parsed' AND (o.valid_to IS NULL OR o.valid_to >= ?) AND (o.valid_from IS NULL OR o.valid_from <= ?)"
         " ORDER BY COALESCE(o.discount_pct,0) DESC, o.price IS NULL, o.price", (t, t)).fetchall()
-    items, seen, hit_terms = [], set(), set()
+    items, hit_terms = [], set()
     for r in rows:
-        for w in terms:
-            if w["term_key"] in r["name_key"] and (not w["chain"] or w["chain"] == r["chain"]):
-                hit_terms.add(w["id"])
-                if r["id"] not in seen:
-                    seen.add(r["id"])
-                    items.append({"term": w["term"], "chain": CHAIN_NAMES[r["chain"]], "name": r["name"],
-                                  "price": eur(r["price"]), "old_price": eur(r["old_price"]),
-                                  "discount_pct": r["discount_pct"], "discount": r["discount_text"],
-                                  "card": bool(r["card"]), "valid_to": r["valid_to"], "product_id": r["product_id"]})
-                break
+        ts = watchmatch.matching_terms(terms, r["name_key"], r["chain"])
+        if not ts:
+            continue
+        hit_terms.update(w["id"] for w in ts)
+        items.append({"term": ts[0]["term"], "terms": [w["term"] for w in ts], "chain": CHAIN_NAMES[r["chain"]],
+                      "name": r["name"], "price": eur(r["price"]), "old_price": eur(r["old_price"]),
+                      "discount_pct": r["discount_pct"], "discount": r["discount_text"],
+                      "card": bool(r["card"]), "valid_to": r["valid_to"],
+                      "ending_soon": ending_soon(r["valid_to"], today, ending_days), "product_id": r["product_id"]})
     if mark_hits and hit_terms:
         with conn:
             conn.executemany("UPDATE watch SET last_hit=? WHERE id=?", [(db.now_iso(), i) for i in hit_terms])
-    by_term = {w["term"]: sum(1 for x in items if x["term"] == w["term"]) for w in terms}
-    return len(items), {"terms": len(terms), "by_term": by_term, "items": items[:MAX_WATCH_ITEMS],
-                        "truncated": len(items) > MAX_WATCH_ITEMS}
+    by_term = {w["term"]: sum(1 for x in items if w["term"] in x["terms"]) for w in terms}
+    by_chain: dict[str, int] = {}
+    for x in items:
+        by_chain[x["chain"]] = by_chain.get(x["chain"], 0) + 1
+    by_chain = dict(sorted(by_chain.items(), key=lambda kv: -kv[1]))
+    return len(items), {"terms": len(terms), "by_term": by_term, "by_chain": by_chain,
+                        "ending_soon": sum(1 for x in items if x["ending_soon"]),
+                        "items": items[:MAX_WATCH_ITEMS], "truncated": len(items) > MAX_WATCH_ITEMS}
 
 
 def problems(conn, chains, today: date) -> list[str]:
@@ -148,34 +158,35 @@ def leaflets_to_announce(conn, today: date, announced: set[int]) -> list[dict]:
 
 
 def watch_hit_key(r) -> str:
-    """Same offer read again (re-parse, re-read) = same key: no second event."""
-    return f"{r['issue_id']}:{r['name_key']}:{r['price']}"
+    """Stable across re-reading and name fixes (0.8.1; 0.8.0 used the name and re-announced 11 offers after the
+    re-parse): leaflet, page, prices."""
+    return f"{r['issue_id']}:{r['page']}:{r['price']}:{r['old_price']}"
 
 
 def watch_hits(conn, today: date) -> list[dict]:
-    """Watched offers valid today or later from leaflets read after the watch term was added, newest leaflet last.
-    Each: one event.leidiniai_watch_hit (mqtt.Bridge.announce_watch_hits)."""
+    """Watched offers valid today or later from leaflets **first seen** after the watch term was added (re-reading
+    a leaflet does not make its offers new). Each: one event.leidiniai_watch_hit (mqtt.Bridge.announce_watch_hits)."""
+    from . import watchmatch
     t = today.isoformat()
-    terms = conn.execute("SELECT * FROM watch").fetchall()
+    terms = conn.execute("SELECT * FROM watch ORDER BY created").fetchall()
     if not terms:
         return []
-    rows = conn.execute("SELECT o.*, i.title AS issue_title, i.parsed_at FROM offers o JOIN issues i ON i.id=o.issue_id"
+    rows = conn.execute("SELECT o.*, i.title AS issue_title, i.first_seen FROM offers o JOIN issues i ON i.id=o.issue_id"
                         " WHERE i.status='parsed' AND (o.valid_to IS NULL OR o.valid_to >= ?) ORDER BY i.id, o.seq",
                         (t,)).fetchall()
     out, seen = [], set()
     for r in rows:
-        for w in terms:
-            if w["term_key"] in r["name_key"] and (not w["chain"] or w["chain"] == r["chain"]):
-                k = watch_hit_key(r)
-                if k not in seen and (r["parsed_at"] or "") >= (w["created"] or ""):
-                    seen.add(k)
-                    out.append({"key": k, "term": w["term"], "chain": r["chain"], "chain_name": CHAIN_NAMES[r["chain"]],
-                                "name": r["name"], "price": eur(r["price"]), "old_price": eur(r["old_price"]),
-                                "discount": r["discount_text"] or (f"-{r['discount_pct']}%" if r["discount_pct"] else None),
-                                "card": bool(r["card"]), "valid_from": r["valid_from"], "valid_to": r["valid_to"],
-                                "leaflet": r["issue_title"], "product_id": r["product_id"],
-                                "path": f"/produktas/{r['product_id']}"})
-                break
+        ts = [w for w in watchmatch.matching_terms(terms, r["name_key"], r["chain"])
+              if (r["first_seen"] or "") >= (w["created"] or "")]
+        k = watch_hit_key(r)
+        if not ts or k in seen:
+            continue
+        seen.add(k)
+        out.append({"key": k, "term": ts[0]["term"], "chain": r["chain"], "chain_name": CHAIN_NAMES[r["chain"]],
+                    "name": r["name"], "price": eur(r["price"]), "old_price": eur(r["old_price"]),
+                    "discount": r["discount_text"] or (f"-{r['discount_pct']}%" if r["discount_pct"] else None),
+                    "card": bool(r["card"]), "valid_from": r["valid_from"], "valid_to": r["valid_to"],
+                    "leaflet": r["issue_title"], "product_id": r["product_id"], "path": f"/produktas/{r['product_id']}"})
     return out
 
 

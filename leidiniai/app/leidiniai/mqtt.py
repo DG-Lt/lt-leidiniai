@@ -37,6 +37,7 @@ CMD_CHECK = f"{BASE}/cmd/check_now"
 CMD_PICTURES = f"{BASE}/cmd/read_pictures"
 FAST_S = 10                # activity and picture reader state are looked at this often (published only on change)
 WATCH_KEEP = 2000
+WATCH_KV = "watch_announced_v2"  # 0.8.1: key = leaflet, page, prices (0.8.0 "watch_announced" used the name)
 HA_STATUS = "homeassistant/status"
 DISCOVERY_PREFIX = "homeassistant"
 REFRESH_S = 600            # states are re-published this often (dates roll over, next check moves)
@@ -252,7 +253,8 @@ class Bridge:
                     st, attrs = ha_state.chain_leaflet(conn, c, today)
                     self._pub(f"{BASE}/{c}/leaflet/attributes", attrs, force=force)
                     self._pub(f"{BASE}/{c}/leaflet/state", st, force=force)
-                n, attrs = ha_state.watched_on_sale(conn, today, mark_hits=True)
+                n, attrs = ha_state.watched_on_sale(conn, today, mark_hits=True,
+                                                      ending_days=self.settings.ending_soon_days)
                 self._pub(f"{BASE}/watched/attributes", attrs, force=force)
                 self._pub(f"{BASE}/watched/state", str(n), force=force)
                 probs = ha_state.problems(conn, self.settings.chains, today)
@@ -280,16 +282,16 @@ class Bridge:
 
     # -- watched offers on sale: one event each --------------------------------
     def _init_watch_hits(self):
-        """First start of 0.8.0: watched offers already there are not announced."""
+        """First start (and 0.8.1, new key format): watched offers already there are not announced."""
         with db.session(self.settings) as conn:
-            if db.kv_get(conn, "watch_announced") is None:
-                db.kv_set(conn, "watch_announced", [h["key"] for h in ha_state.watch_hits(conn, self.today())])
+            if db.kv_get(conn, WATCH_KV) is None:
+                db.kv_set(conn, WATCH_KV, [h["key"] for h in ha_state.watch_hits(conn, self.today())])
 
     def announce_watch_hits(self):
         if not self.client or not self.connected:
             return
         with self._lock, db.session(self.settings) as conn:
-            done = list(db.kv_get(conn, "watch_announced", []))
+            done = list(db.kv_get(conn, WATCH_KV, []))
             have = set(done)
             for h in ha_state.watch_hits(conn, self.today()):
                 if h["key"] in have:
@@ -300,7 +302,7 @@ class Bridge:
                 log.info("MQTT: watched offer event – %s %s %s", h["chain_name"], h["name"], h["price"])
                 done.append(h["key"])
                 have.add(h["key"])
-            db.kv_set(conn, "watch_announced", done[-WATCH_KEEP:])
+            db.kv_set(conn, WATCH_KV, done[-WATCH_KEEP:])
 
     # -- new leaflet events ----------------------------------------------------
     def _init_announced(self):

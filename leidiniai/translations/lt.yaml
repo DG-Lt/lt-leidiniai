@@ -20,6 +20,9 @@ configuration:
   keep_images_weeks:
     name: Laikyti prekių nuotraukas (savaitės)
     description: Senesnės nuotraukų iškarpos ištrinamos (pasiūlymai ir kainos lieka).
+  ending_soon_days:
+    name: Besibaigiančios akcijos (dienos)
+    description: Pasiūlymų, kurie baigiasi per tiek dienų (įskaitant šiandieną), pabaigos data paryškinama; filtras „Besibaigiantys“ rodo tik juos. 0 – nežymėti.
   log_level:
     name: Žurnalo lygis
   picture_reader:

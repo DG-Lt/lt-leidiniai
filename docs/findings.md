@@ -108,3 +108,8 @@ Checked page by page against the week 46/47 files; regression pages in `tests/fi
 - Memory: llama-server's prompt cache kept every page (~160–235 MB each, 8 GB limit) → RES 7.2 → 8.0 GB on Šilas.
   0.8.0 unloads the model after each page (`keep_alive: 0`).
 - The Ollama log was 200 KB of `n_gen = …` progress lines (every 3 s) → filtered.
+
+## Lidl short offers (2026-11-21)
+- Some Lidl offers run only 1–3 days: the date is printed in front of the name, "11.21–11.22" with the dot as a
+  separate glyph → text "11 21–11 22 PILOS / POLMLEK SVIESTAS …", repeated at the end as "Nuo šeštadienio, 11 21,
+  iki 11 22". 0.8.1 turns it into the offer's own dates (week 47 food: 3 offers).

@@ -106,6 +106,8 @@ def parse_stored(conn, settings, issue_id: int, parser: str | None, summary: dic
                 return False
         else:
             offers = parse_issue(chain, parser, files, meta, ref, log)
+            from .vision import offer_dates
+            offer_dates(offers, issue)  # an offer's own printed dates (Lidl "11 21–11 22 …"), inside the leaflet's
         t_parse = time.monotonic() - t0
         if parser in ("pdf", "catalogue_pdf", "vynoteka"):
             images = render_issue_crops(settings, issue, files, offers, log)

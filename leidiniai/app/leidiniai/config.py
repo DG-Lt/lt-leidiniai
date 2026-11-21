@@ -16,6 +16,7 @@ DEFAULTS = {
     "browser_fallback": True,
     "keep_pdf_weeks": 8,
     "keep_images_weeks": 12,
+    "ending_soon_days": 3,             # offers ending within this many days are highlighted ("Besibaigiantys")
     "log_level": "info",
     "picture_reader": "none",          # none | tesseract | ollama – image-only leaflets (Šilas, some Rimi)
     "ollama_url": "",                  # external Ollama (http://pc:11434); empty = run Ollama on this box
@@ -33,6 +34,7 @@ class Settings:
     browser_fallback: bool = True
     keep_pdf_weeks: int = 8
     keep_images_weeks: int = 12
+    ending_soon_days: int = 3
     log_level: str = "info"
     picture_reader: str = "none"
     ollama_url: str = ""
@@ -94,6 +96,7 @@ def load(data_dir: str | os.PathLike | None = None) -> Settings:
         setattr(s, k, opts[k])
     s.request_delay = float(s.request_delay)
     s.threads = int(s.threads)
+    s.ending_soon_days = max(0, min(14, int(s.ending_soon_days)))
     s.chains = [c for c in CHAINS if c in (s.chains or [])]
     if s.picture_reader not in ("none", "tesseract", "ollama"):
         s.picture_reader = "none"
