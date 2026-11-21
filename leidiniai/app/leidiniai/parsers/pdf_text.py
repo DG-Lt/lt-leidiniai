@@ -72,6 +72,16 @@ PROMO_RX = re.compile(
     r"Pasiūlymas\s+galioja(?:\s+(?:nuo|iki)\s+(?:20\d\d[\s.\-]+\d{1,2}[\s.\-]+\d{1,2}|\d{1,2}[\s.\-]+\d{1,2}))+\s*\.?"
     r"|Nuolaida\s+suteikiama\s+tik\s+pažymėtoms\s+prekėms\s*\.?"
     r"|\b(?:SUPERKAINA|ANIAKREPUS)\b", re.I)
+# Lidl: promotion terms, shelf hints and product codes printed inside the name block
+LIDL_RX = re.compile(
+    r"Akcijos\s+limitas\s+vieno\s+pirkimo\s+metu(?:\s*[–:-]?\s*\d+\s*(?:vnt|pak|kg|l)?\.?)?"
+    r"|Nuolaidos\s+nesumuojamos\.?"
+    r"|Pasiūlymas\s+galioja\s+tik\s+nurodytos\s+akcijos\s+metu[^.]{0,120}\.?"
+    r"|Pasiūlymas\s+galioja\s+tik\s+(?:su\s+)?Lidl\s+Plus[^.]{0,80}\.?"
+    r"|Atsiprašome,?\s+šios\s+prekės\s+laikinai\s+neturime\.?"
+    r"|Ieškoti\s+šaldytuve"
+    r"|Nevartoti\s+su\s+alkoholiniais\s+gėrimais\.?"
+    r"|(?<![\d,.])\b\d{6,7}(?:\s*[-,]\s*\d{5,7})*\b(?![,.]\d)", re.I)
 # ≥4 single letters in a row: a vertical badge ('SUPERKAINA' stacked or rotated) read letter by letter
 _UP = "A-ZĄČĘĖĮŠŲŪŽ"
 LETTER_RUN = re.compile(rf"(?:(?<=\s)|^)(?:[{_UP}]\s+){{3,}}[{_UP}](?=\s|$)")
@@ -363,7 +373,7 @@ def parse_words(ws: list[dict], imgs: list[dict], pno: int, chain: str, cfg: Cha
             if re.fullmatch(r"[^\W\d_]", t2):
                 continue  # a lone letter: one line of vertical lettering
             name_lines.append(t2)
-        name = clean_name(" ".join(name_lines))
+        name = clean_name(" ".join(name_lines), chain)
         o = Offer(chain=chain, name=name, kind=a["kind"], page=pno)
         if a["kind"] == "price":
             o.price = a["value"]
@@ -408,10 +418,12 @@ def parse_words(ws: list[dict], imgs: list[dict], pno: int, chain: str, cfg: Cha
     return merge_single_prices(out)
 
 
-def clean_name(name: str) -> str:
+def clean_name(name: str, chain: str = "") -> str:
     """Joined name lines → name: drop promo sentences and runs of single letters that come from several lines
-    of vertical lettering ('… 500 ml A K I E P R U S')."""
+    of vertical lettering ('… 500 ml A K I E P R U S'). Lidl: promotion terms and product codes too."""
     name = PROMO_RX.sub(" ", name)
+    if chain == "lidl":
+        name = LIDL_RX.sub(" ", name)
     name = LETTER_RUN.sub(" ", name)
     return re.sub(r"\s+", " ", name).strip(" ,;.")
 

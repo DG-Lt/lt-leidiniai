@@ -2,7 +2,7 @@
 {% block title %}Leidiniai – būsena{% endblock %}
 {% block content %}
 <h1>Leidiniai</h1>
-{% if running %}<p class="warn">Dabar tikrinama: {{ CHAIN_NAMES[running] }}</p>{% endif %}
+{% if activity and activity.state != 'laukia' %}<p class="warn">Dabar: {{ activity.state }}</p>{% endif %}
 <table>
   <tr><th>Tinklas</th><th>Paskutinis tikrinimas</th><th>Kitas tikrinimas</th><th>Klaida</th><th></th></tr>
   {% for c in chains %}
@@ -15,7 +15,12 @@
   </tr>
   {% endfor %}
 </table>
-<form method="post" action="{{ url_for('ui.check_now') }}" style="margin-top:.6rem"><input type="hidden" name="chain" value="all"><button>Tikrinti visus dabar</button></form>
+<form method="post" action="{{ url_for('ui.check_now') }}" style="margin-top:.6rem" class="inline"><input type="hidden" name="chain" value="all"><button>Tikrinti visus dabar</button></form>
+{% if reader_ready %}<form method="post" action="{{ url_for('ui.read_pictures') }}" style="margin-top:.6rem" class="inline"
+  onsubmit="return confirm('Skaityti paveikslėlius dabar? Tai užtrunka valandas (~10 min. puslapiui) ir apkrauna procesorių.')">
+  <button class="secondary">Skaityti paveikslėlius dabar{% if waiting_pictures %} ({{ waiting_pictures }}){% endif %}</button></form>{% endif %}
+<p class="muted small">„Tikrinti dabar“ atsisiunčia naujus leidinius. Leidiniai iš paveikslėlių (Šilas, Vynotekos gėrimai) skaitomi naktį po tikrinimų
+  arba paspaudus „Skaityti paveikslėlius dabar“.</p>
 
 <h2>Leidiniai</h2>
 <table>
@@ -25,7 +30,10 @@
     <td>{{ CHAIN_NAMES[i.chain] }}</td>
     <td>{% if i.source_url %}<a href="{{ i.source_url }}" target="_blank" rel="noopener">{{ i.title }}</a>{% else %}{{ i.title }}{% endif %}</td>
     <td>{{ i.valid_from|day }} – {{ i.valid_to|day }}</td>
-    <td class="{{ 'err' if i.status in ('failed', 'parse_failed') }}" title="{{ i.error or '' }}">{{ status_lt.get(i.status, i.status) }}</td>
+    <td class="{{ 'err' if i.status in ('failed', 'parse_failed') }}" title="{{ i.error or '' }}">{{ status_lt.get(i.status, i.status) }}{% if i.id in rereading %} <span class="muted">(laukia skaitymo iš naujo)</span>{% endif %}
+      {% if i.id in pictures and pages_read.get(i.id) and i.status != 'parsed' %}<span class="muted progress">– perskaityta {{ pages_read[i.id] }} psl.</span>{% endif %}
+      {% if i.id in pictures and i.status in ('parsed', 'parse_failed', 'waiting_parser') and i.id not in rereading %}
+      <form method="post" action="{{ url_for('ui.reread', iid=i.id) }}" class="inline" onsubmit="return confirm('Skaityti šį leidinį iš naujo nuo pirmo puslapio?')"><button class="link small">Skaityti iš naujo</button></form>{% endif %}</td>
     <td class="num">{% if i.offers %}<a href="{{ url_for('offers.offers', chain=i.chain, when='all', sort='leaflet') }}">{{ i.offers|number }}</a>{% else %}{{ i.offers|number if i.offers is not none else '–' }}{% endif %}</td>
     <td>{{ i.first_seen|dt }}</td>
   </tr>

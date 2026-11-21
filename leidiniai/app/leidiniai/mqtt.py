@@ -11,6 +11,10 @@ Entities (device "Leidiniai"):
   button.leidiniai_check_now         queue a check of all chains
   sensor.leidiniai_last_run          timestamp of the last finished check (+ chain, status, counts)
   sensor.leidiniai_next_check        timestamp of the next check (+ per chain)
+  sensor.leidiniai_activity          what runs now: 'laukia', 'tikrinamas IKI', 'Šilas: puslapis 3/12' (0.8.0)
+  sensor.leidiniai_picture_reader    picture reader: paruoštas / ruošiamas / klaida / išjungtas; message (0.8.0)
+  event.leidiniai_watch_hit          event_type watch_hit, once per new watched offer (0.8.0)
+  button.leidiniai_read_pictures     read the picture leaflets that wait now instead of at night (0.8.0)
 Availability: leidiniai/status online|offline (last will). Discovery is sent again when HA restarts
 (homeassistant/status online). The password is never logged.
 """
@@ -30,6 +34,9 @@ log = logging.getLogger("leidiniai.mqtt")
 BASE = "leidiniai"
 AVAIL = f"{BASE}/status"
 CMD_CHECK = f"{BASE}/cmd/check_now"
+CMD_PICTURES = f"{BASE}/cmd/read_pictures"
+FAST_S = 10                # activity and picture reader state are looked at this often (published only on change)
+WATCH_KEEP = 2000
 HA_STATUS = "homeassistant/status"
 DISCOVERY_PREFIX = "homeassistant"
 REFRESH_S = 600            # states are re-published this often (dates roll over, next check moves)
@@ -59,6 +66,23 @@ def supervisor_credentials(timeout: float = 10) -> dict | None:
         return None
     return {"host": d["host"], "port": int(d.get("port") or 1883), "username": d.get("username"),
             "password": d.get("password"), "ssl": bool(d.get("ssl"))}
+
+
+def panel_path(timeout: float = 10) -> str | None:
+    """The app's sidebar page in HA (/hassio/ingress/<slug>), for links in events. None outside HA."""
+    token = os.environ.get("SUPERVISOR_TOKEN")
+    if not token:
+        return None
+    import requests
+    try:
+        r = requests.get("http://supervisor/addons/self/info", headers={"Authorization": f"Bearer {token}"},
+                         timeout=timeout)
+        r.raise_for_status()
+        slug = (r.json().get("data") or {}).get("slug")
+    except Exception as e:
+        log.warning("MQTT: the app's slug is unknown (%s): events carry no link", e)
+        return None
+    return f"/hassio/ingress/{slug}" if slug else None
 
 
 def paho_client(client_id: str):
@@ -96,6 +120,15 @@ def discovery(chains) -> list[tuple[str, dict]]:
         json_attributes_topic=f"{BASE}/last_run/attributes", entity_category="diagnostic")
     add("sensor", "next_check", "Kitas tikrinimas", device_class="timestamp", state_topic=f"{BASE}/next_check/state",
         json_attributes_topic=f"{BASE}/next_check/attributes", entity_category="diagnostic")
+    add("sensor", "activity", "Veikla", icon="mdi:progress-clock", state_topic=f"{BASE}/activity/state",
+        json_attributes_topic=f"{BASE}/activity/attributes")
+    add("sensor", "picture_reader", "Paveikslėlių skaitytuvas", icon="mdi:image-text",
+        state_topic=f"{BASE}/picture_reader/state", json_attributes_topic=f"{BASE}/picture_reader/attributes",
+        entity_category="diagnostic")
+    add("event", "watch_hit", "Stebima prekė akcijoje", icon="mdi:tag-heart-outline",
+        state_topic=f"{BASE}/event/watch_hit", event_types=["watch_hit"])
+    add("button", "read_pictures", "Skaityti paveikslėlius dabar", icon="mdi:image-search-outline",
+        command_topic=CMD_PICTURES, payload_press="PRESS")
     return out
 
 
@@ -113,6 +146,7 @@ class Bridge:
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._last: dict[str, str] = {}   # topic → last retained payload (skip unchanged)
+        self.panel_path: str | None = None  # /hassio/ingress/<slug>, for links in events
         self._removed_chains: list[str] = []
 
     # -- life cycle ----------------------------------------------------------
@@ -122,6 +156,8 @@ class Bridge:
         if not self.creds:
             return False
         self._init_announced()
+        self._init_watch_hits()
+        self.panel_path = panel_path()
         c = self.client = self.client_factory("leidiniai")
         c.on_connect = self._on_connect
         c.on_disconnect = self._on_disconnect
@@ -137,6 +173,7 @@ class Bridge:
         c.connect_async(self.creds["host"], int(self.creds["port"]), keepalive=60)
         c.loop_start()
         threading.Thread(target=self._refresh_loop, name="mqtt-refresh", daemon=True).start()
+        threading.Thread(target=self._fast_loop, name="mqtt-activity", daemon=True).start()
         return True
 
     def stop(self):
@@ -156,10 +193,11 @@ class Bridge:
             return
         self.connected = True
         log.info("MQTT: connected")
-        client.subscribe([(CMD_CHECK, 1), (HA_STATUS, 1)])
+        client.subscribe([(CMD_CHECK, 1), (CMD_PICTURES, 1), (HA_STATUS, 1)])
         self.publish_discovery()
         client.publish(AVAIL, "online", qos=1, retain=True)
         self.publish_states(force=True)
+        self.publish_activity(force=True)
         self.announce_new()
 
     def _on_disconnect(self, client, userdata, flags, reason_code, properties=None):
@@ -173,11 +211,19 @@ class Bridge:
             log.info("MQTT: check requested from Home Assistant")
             if self.runner:
                 self.runner.request("all", "mqtt")
+        elif msg.topic == CMD_PICTURES:
+            from . import vision
+            if not vision.ready(self.settings):
+                log.warning("MQTT: picture reading requested, but the picture reader is not ready")
+            elif self.runner:
+                log.info("MQTT: picture reading requested from Home Assistant")
+                self.runner.request_pictures("mqtt")
         elif msg.topic == HA_STATUS and payload == "online":
             log.info("MQTT: Home Assistant restarted, sending discovery again")
             self.publish_discovery()
             self.client.publish(AVAIL, "online", qos=1, retain=True)
             self.publish_states(force=True)
+            self.publish_activity(force=True)
 
     # -- publishing ----------------------------------------------------------
     def _pub(self, topic: str, payload, retain: bool = True, force: bool = False):
@@ -220,6 +266,42 @@ class Bridge:
             self._pub(f"{BASE}/next_check/attributes", {CHAIN_NAMES[c]: v for c, v in nxt.items()}, force=force)
             self._pub(f"{BASE}/next_check/state", min(nxt.values()) if nxt else "None", force=force)
 
+    def publish_activity(self, force: bool = False):
+        """Activity and picture reader state: cheap (no database), looked at every FAST_S seconds."""
+        if not self.client or not self.connected:
+            return
+        act = self.runner.activity() if self.runner else {"state": "laukia"}
+        st = act.pop("state")
+        self._pub(f"{BASE}/activity/attributes", act, force=force)
+        self._pub(f"{BASE}/activity/state", st[:255], force=force)
+        st, attrs = ha_state.picture_reader(self.settings)
+        self._pub(f"{BASE}/picture_reader/attributes", attrs, force=force)
+        self._pub(f"{BASE}/picture_reader/state", st, force=force)
+
+    # -- watched offers on sale: one event each --------------------------------
+    def _init_watch_hits(self):
+        """First start of 0.8.0: watched offers already there are not announced."""
+        with db.session(self.settings) as conn:
+            if db.kv_get(conn, "watch_announced") is None:
+                db.kv_set(conn, "watch_announced", [h["key"] for h in ha_state.watch_hits(conn, self.today())])
+
+    def announce_watch_hits(self):
+        if not self.client or not self.connected:
+            return
+        with self._lock, db.session(self.settings) as conn:
+            done = list(db.kv_get(conn, "watch_announced", []))
+            have = set(done)
+            for h in ha_state.watch_hits(conn, self.today()):
+                if h["key"] in have:
+                    continue
+                ev = {"event_type": "watch_hit", **{k: v for k, v in h.items() if k != "key"},
+                      "url": f"{self.panel_path}{h['path']}" if self.panel_path else None}
+                self._pub(f"{BASE}/event/watch_hit", ev, retain=False)
+                log.info("MQTT: watched offer event – %s %s %s", h["chain_name"], h["name"], h["price"])
+                done.append(h["key"])
+                have.add(h["key"])
+            db.kv_set(conn, "watch_announced", done[-WATCH_KEEP:])
+
     # -- new leaflet events ----------------------------------------------------
     def _init_announced(self):
         """First start with MQTT (e.g. update from 0.3): leaflets already there are not announced again."""
@@ -240,12 +322,15 @@ class Bridge:
             db.kv_set(conn, "mqtt_announced", done[-ANNOUNCED_KEEP:])
 
     # -- hooks -------------------------------------------------------------
-    def on_run_start(self, chain):
+    def on_run_start(self, chain):  # also called on every page of a picture reading
+        self._safe(self.publish_activity)
         self._safe(self.publish_states)
 
     def on_run_done(self, chain, run_id):
         self._safe(self.announce_new)
+        self._safe(self.announce_watch_hits)
         self._safe(self.publish_states)
+        self._safe(self.publish_activity)
 
     def refresh(self):
         """Watch list changed in the panel etc. Runs in the background so the page answers at once."""
@@ -260,4 +345,9 @@ class Bridge:
     def _refresh_loop(self):
         while not self._stop.wait(REFRESH_S):
             self._safe(self.announce_new)
+            self._safe(self.announce_watch_hits)
             self._safe(self.publish_states)
+
+    def _fast_loop(self):
+        while not self._stop.wait(FAST_S):
+            self._safe(self.publish_activity)

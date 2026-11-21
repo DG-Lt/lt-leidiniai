@@ -3,9 +3,12 @@
 {% block content %}
 <p><a href="{{ request.referrer if request.referrer and '/produktas/' not in request.referrer else url_for('offers.offers') }}">‹ Atgal</a></p>
 <div class="product">
-  <div class="pimg">{% set src = image_url(p.image) %}{% if src %}<img src="{{ src }}" alt="" referrerpolicy="no-referrer">{% endif %}</div>
+  <div class="pimg">{% set src = image_url(p.image) %}{% if src %}<img src="{{ src }}" alt="" referrerpolicy="no-referrer" class="zoomable" title="Spustelėkite – padidinti" onclick="this.classList.toggle('big')">{% endif %}</div>
   <div>
     <h1>{{ p.name or '(pavadinimas neatpažintas)' }}</h1>
+    {% if desc %}<p><b>Aprašymas:</b> {{ desc }}</p>{% endif %}
+    {% set h0 = hist[0] if hist else none %}
+    {% if h0 %}<p>{% set orig = originals.get(h0.id) %}{% if orig %}<a href="{{ orig }}" target="_blank" rel="noopener">Originalus leidinys{% if h0.page %}, p. {{ h0.page }}{% endif %}</a>{% endif %}{% if orig and h0.source_url %} · {% endif %}{% if h0.source_url %}<a href="{{ h0.source_url }}" target="_blank" rel="noopener">Leidinys tinklo svetainėje</a>{% endif %}</p>{% endif %}
     <p>{% set lg = logo_url(p.chain) %}{% if lg %}<img class="logo" src="{{ lg }}" alt="{{ CHAIN_NAMES[p.chain] }}" title="{{ CHAIN_NAMES[p.chain] }}">{% else %}<span class="chain c-{{ p.chain }}">{{ CHAIN_NAMES[p.chain] }}</span>{% endif %}
       {% if p.quantity %} · {{ p.quantity }}{% endif %}
       · {{ CATEGORIES.get(p.category, p.category) }}{% if p.category_source == 'user' %} <span class="muted">(nustatyta rankiniu būdu)</span>{% elif p.category_source == 'similar' %} <span class="muted" title="Pagal panašius produktus, kuriems kategoriją nurodė tinklas arba jūs">(pagal panašius produktus)</span>{% elif p.category_source == 'shop' %} <span class="muted">(tinklo kategorija)</span>{% endif %}</p>
@@ -36,7 +39,7 @@
   {% for h in hist %}
   <tr>
     <td>{{ h.valid_from|day }} – {{ h.valid_to|day }}</td>
-    <td>{% if h.source_url %}<a href="{{ h.source_url }}" target="_blank" rel="noopener">{{ h.issue_title }}</a>{% else %}{{ h.issue_title }}{% endif %}{% if h.page %} <span class="muted">p. {{ h.page }}</span>{% endif %}</td>
+    <td>{% if h.source_url %}<a href="{{ h.source_url }}" target="_blank" rel="noopener">{{ h.issue_title }}</a>{% else %}{{ h.issue_title }}{% endif %}{% if h.page %} {% set orig = originals.get(h.id) %}{% if orig %}<a href="{{ orig }}" target="_blank" rel="noopener" title="Originalus leidinys šiame puslapyje">p. {{ h.page }}</a>{% else %}<span class="muted">p. {{ h.page }}</span>{% endif %}{% endif %}</td>
     <td>{{ h.name }}</td>
     <td class="num">{{ h.price|money }}</td>
     <td class="num">{{ h.old_price|money if h.old_price else '' }}</td>

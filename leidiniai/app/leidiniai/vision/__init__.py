@@ -97,25 +97,126 @@ def start_background(settings, log) -> threading.Thread:
     return t
 
 
-def parse_issue(settings, issue, files: list[dict], log):
-    """Read an image-only leaflet. Returns (offers, {offer index: crop path relative to img_dir})."""
+def _reader(settings):
+    if settings.picture_reader == "tesseract":
+        from . import tesseract as reader
+    else:
+        from . import ollama as reader
+    return reader
+
+
+def offer_from_dict(d: dict):
+    from datetime import date as _date
+
+    from ..parsers import Offer
+    d = dict(d)
+    for k in ("valid_from", "valid_to"):
+        if d.get(k):
+            d[k] = _date.fromisoformat(d[k])
+    return Offer(**d)
+
+
+def place_offers(offers, img_path: Path) -> None:
+    """Snap each offer's box (model pixels of its page picture) to the product card it sits in (cells.py).
+    Pages without cards (free collage) keep the model's box with a margin."""
+    from PIL import Image
+
+    from . import cells
+    img = Image.open(img_path)
+    W, H = img.size
+    found = cells.find_cells(img)
+    areas = sorted((c[2] - c[0]) * (c[3] - c[1]) for c in found)
+    median = areas[len(areas) // 2] if areas else 0
+    pad = round(0.02 * W)
+    for o in offers:
+        if not o.crop:
+            continue
+        box = (o.crop["x0"], o.crop["top"], o.crop["x1"], o.crop["bottom"])
+        c = cells.snap(box, found)
+        if c:
+            area = (c[2] - c[0]) * (c[3] - c[1])
+            barea = max(1, (box[2] - box[0]) * (box[3] - box[1]))
+            # one big region holding several cards (few cells found on the page): not a card
+            if (len(found) >= 3 and area > 1.6 * median) or (len(found) < 3 and barea < 0.25 * area):
+                c = None
+        if c:
+            o.crop = {"x0": c[0], "top": c[1], "x1": c[2], "bottom": c[3]}
+            o.extra["crop"] = "card"
+        else:
+            o.crop = {"x0": max(0, box[0] - pad), "top": max(0, box[1] - pad),
+                      "x1": min(W, box[2] + pad), "bottom": min(H, box[3] + pad)}
+            o.extra["crop"] = "model"
+
+
+def offer_dates(offers, issue) -> None:
+    """Offers with their own dates printed ('LAPKRIČIO 19–21 d.', Šilas 3D akcija) get them, if inside the leaflet's
+    validity (± a week, a wrong reading must not hide or extend an offer)."""
+    from datetime import date as _date, timedelta
+
+    from ..textutil import offer_range
+    vf = _date.fromisoformat(issue["valid_from"]) if issue["valid_from"] else None
+    vt = _date.fromisoformat(issue["valid_to"]) if issue["valid_to"] else None
+    ref = vf or _date.today()
+    for o in offers:
+        t = o.extra.get("dates_text")
+        if not t:
+            continue
+        a, b = offer_range(t, ref)
+        lo = (vf - timedelta(days=7)) if vf else None
+        hi = (vt + timedelta(days=7)) if vt else None
+        ok = all(x is None or ((lo is None or x >= lo) and (hi is None or x <= hi)) for x in (a, b))
+        if (a or b) and ok and (not a or not b or a <= b):
+            o.valid_from, o.valid_to = a or o.valid_from, b or o.valid_to
+
+
+def parse_issue(settings, issue, files: list[dict], log, conn=None, progress=lambda page, pages: None):
+    """Read an image-only leaflet. Returns (offers, {offer index: crop path relative to img_dir}).
+
+    With `conn`, each page's result is saved as soon as it is read (table vision_pages) and pages already read with
+    the same reader, model, prompt and picture size are not read again: a restart or an update continues from the
+    next page. The reader (Ollama) is started only when a page has to be read."""
+    import contextlib
+    import time
+
     from . import pages
     rel = Path(issue["chain"]) / str(issue["id"])
     work = settings.tmp_dir / "vision" / str(issue["id"])
     imgs = pages.page_images(files, work, log)
     if not imgs:
         raise NoPictures("no page pictures stored for this leaflet")
-    if settings.picture_reader == "tesseract":
-        from . import tesseract as reader
-    else:
-        from . import ollama as reader
+    reader = _reader(settings)
+    base_sig = reader.signature(settings)
     offers = []
     try:
-        with reader.session(settings, log) as read_page:
+        with contextlib.ExitStack() as stack:
+            read_page = None
             for n, img in enumerate(imgs, start=1):
-                got = read_page(img, n, issue["chain"])
-                log.info("%s %s: page %d/%d – %d offer(s)", issue["chain"], issue["key"], n, len(imgs), len(got))
+                from PIL import Image
+                sig = f"{base_sig}|{'x'.join(map(str, Image.open(img).size))}"
+                row = conn.execute("SELECT sig, offers FROM vision_pages WHERE issue_id=? AND page=?",
+                                   (issue["id"], n)).fetchone() if conn is not None else None
+                progress(n, len(imgs))
+                if row and row["sig"] == sig:
+                    got = [offer_from_dict(d) for d in json.loads(row["offers"])]
+                    log.info("%s %s: page %d/%d – %d offer(s) (read earlier)", issue["chain"], issue["key"], n,
+                             len(imgs), len(got))
+                else:
+                    if read_page is None:
+                        read_page = stack.enter_context(reader.session(settings, log))
+                    t = time.monotonic()
+                    got = read_page(img, n, issue["chain"])
+                    secs = time.monotonic() - t
+                    log.info("%s %s: page %d/%d – %d offer(s) in %.0f s", issue["chain"], issue["key"], n, len(imgs),
+                             len(got), secs)
+                    if conn is not None:
+                        with conn:
+                            conn.execute("INSERT OR REPLACE INTO vision_pages(issue_id,page,sig,offers,seconds,read_at)"
+                                         " VALUES(?,?,?,?,?,?)",
+                                         (issue["id"], n, sig, json.dumps([o.as_dict() for o in got], ensure_ascii=False),
+                                          round(secs, 1), now_iso()))
+                place_offers(got, img)
                 offers += got
+        offer_dates(offers, issue)
         out_dir = settings.img_dir / rel
         if out_dir.exists():
             shutil.rmtree(out_dir)

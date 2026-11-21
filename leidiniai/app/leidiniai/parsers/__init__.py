@@ -68,14 +68,45 @@ def pct_from(price: int | None, old: int | None) -> int | None:
 NAME_QTY = re.compile(r"(?:,|\s)\s*((?:\d+\s*[x×]\s*)?\d+(?:[,.]\d+)?\s*(?:kg|g|ml|l|vnt|rit|lap|pak)\.?)\s*[*,.]*\s*$", re.I)
 
 
+# words that only say how much / how many: a "name" made of these and numbers is no name ('cm', '2 vnt./rink. ml')
+SIZE_WORDS = r"rūšių|rūšys|įvairių|spalvų|spalvos|dydžių|vnt|rink|kompl|kg|g|mg|ml|cl|l|cm|mm|m|pak|rit|lap|sl|x"
+_SIZE_ONLY = re.compile(rf"(?i)\b(?:{SIZE_WORDS})\b")
+# a unit left alone at the end after a word (a size circle next to the name): 'Puodelių rinkinys ml'
+_STRAY_UNIT = re.compile(r"(?<=[^\W\d_])\s+(?:ml|cl|l|cm|mm|g|kg)\.?$", re.I)
+# abbreviations whose full stop does not end the name ('rieb.', 'vnt.', 'a.r.', 'pr.')
+_ABBR = {"vnt", "rieb", "sl", "pak", "g", "kg", "ml", "l", "cl", "cm", "mm", "m", "a", "r", "pr", "d", "kt", "nr",
+         "rūš", "įv", "gab", "rit", "lap", "šald", "gryn", "sk", "maž", "did", "pvz", "t", "y", "tūkst", "proc",
+         "st", "ž", "ats", "kiek", "mėn", "val", "min", "sav", "max", "apie", "kompl", "pc", "vol"}
+SHORT_MIN_REST = 15  # a description shorter than this stays in the name
+
+
+def short_name(name: str) -> tuple[str, str]:
+    """Name up to the first full stop that ends a sentence (next word starts with a capital letter) → (short, rest).
+    'Plaukų … peiliukai. Nerūdijančio plieno ašmenys. …' → ('Plaukų … peiliukai', 'Nerūdijančio plieno ašmenys. …')."""
+    for m in re.finditer(r"([^\W\d_]+|\d)\.\s+(?=[A-ZĄČĘĖĮŠŲŪŽ0-9])", name):
+        w = m.group(1)
+        if w.lower() in _ABBR or w.isdigit() or (w.isupper() and len(w) <= 3):  # 'DR. OETKER', 'ST. NICOLAS'
+            continue
+        short, rest = name[:m.start(1) + len(m.group(1))].strip(), name[m.end():].strip()
+        if len(short) >= 3 and len(rest) >= SHORT_MIN_REST:
+            return short, rest
+        break
+    return name, ""
+
+
 def finish(o: Offer) -> Offer:
     """Common clean-up and derived fields."""
     o.name = re.sub(r"\s+", " ", o.name or "")
     o.name = re.sub(r"[\s,;.*]+$", "", o.name).strip(" ,;")
+    o.name = _STRAY_UNIT.sub("", o.name).strip(" ,;")
     if o.quantity is None:
         q = NAME_QTY.search(o.name.replace("*", ""))
         if q:
             o.quantity = q.group(1)
+    if not o.extra.get("desc"):
+        o.name, desc = short_name(o.name)
+        if desc:
+            o.extra["desc"] = desc
     if o.discount_pct is None and o.discount_text:
         m = re.search(r"(\d{1,2})\s*%", o.discount_text)
         if m:
@@ -87,8 +118,8 @@ def finish(o: Offer) -> Offer:
         o.old_price = None
     if not o.name:
         o.flags.append("no_name")
-    elif not re.search(r"[^\W\d_]{3,}", re.sub(r"(?i)\b(rūšių|rūšys|vnt|kg|ml|pak|įvairių|spalvų)\b", "", o.name)):
-        o.flags.append("weak_name")  # only a quantity / '3 rūšių' – the real name was not found
+    elif not re.search(r"[^\W\d_]{3,}", _SIZE_ONLY.sub("", o.name)):
+        o.flags.append("weak_name")  # only a size / quantity ('cm', '2 vnt./rink. ml', '3 rūšių'): no real name
     if o.price is None and o.kind != "badge":
         o.flags.append("no_price")
     return o

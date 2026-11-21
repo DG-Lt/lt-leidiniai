@@ -66,12 +66,16 @@ def test_due_rule(settings):
     assert due(conn, "iki", REF)[0]  # nothing yet
     with conn:
         conn.execute("INSERT INTO issues(chain,key,series,title,valid_from,valid_to,first_seen,last_seen,status)"
-                     " VALUES('iki','B47-bazinis_www','bazinis','B47','2026-11-16','2026-11-22',?,?, 'downloaded')",
+                     " VALUES('iki','B47-bazinis_www','bazinis','B47','2026-11-16','2026-11-22',?,?, 'parsed')",
                      ("2026-11-14T03:30:00+02:00", "2026-11-14T03:30:00+02:00"))
         conn.execute("INSERT INTO chain_state(chain,last_check) VALUES('iki','2026-11-14T03:31:00+02:00')")
     is_due, _, nxt = due(conn, "iki", REF)
     assert not is_due and nxt == date(2026, 11, 20)  # 2 days before Sunday 11-22
     assert due(conn, "iki", date(2026, 11, 20))[0]
+    # 0.8.0: a leaflet that waits to be read again (stored files, e.g. after a parser update) makes the chain due
+    with conn:
+        conn.execute("UPDATE issues SET status='downloaded'")
+    assert due(conn, "iki", REF)[:2] == (True, "a leaflet waits to be read again")
 
 
 def test_leaflets_page(settings):

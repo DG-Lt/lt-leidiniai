@@ -39,7 +39,8 @@ def test_ollama_json_to_offers():
     a, b = offers_from_json(data, 2, "silas", (992, 1404))
     assert (a.name, a.price, a.old_price, a.discount_pct, a.unit, a.unit_price, a.card, a.page) == \
         ("Pienas DVARO, 2,5 % rieb., 1 l", 119, 159, 25, "l", 119, True, 2)
-    assert a.crop == {"x0": 10, "top": 20, "x1": 300, "bottom": 400} and "vision" in a.flags
+    # 0.8.0: boxes are in the pixels the model sees (sides rounded to 28: 980×1400) → scaled to the picture
+    assert a.crop == {"x0": 10, "top": 20, "x1": 304, "bottom": 401} and "vision" in a.flags
     assert (b.kind, b.discount_text, b.crop) == ("badge", "-30%", None)
 
 
@@ -99,7 +100,8 @@ def _silas_issue(conn, tmp_path, status="waiting_parser"):
 
 
 def test_waiting_leaflet_read_when_reader_ready(settings, tmp_path, monkeypatch):
-    from leidiniai import pipeline, schedule, vision
+    """0.8.0: a chain check never reads pictures; the picture reading (job.run_pictures) does, when ready."""
+    from leidiniai import job, pipeline, schedule, vision
     from leidiniai.parsers import Offer
     from leidiniai.vision import ollama
     settings.picture_reader = "ollama"
@@ -108,11 +110,13 @@ def test_waiting_leaflet_read_when_reader_ready(settings, tmp_path, monkeypatch)
     with conn:
         conn.execute("INSERT INTO chain_state(chain,last_check) VALUES('silas',?)", (db.now_iso(),))
     assert not vision.ready(settings)
-    assert not schedule.due(conn, "silas", date.today(), False)[0]
+    assert job.run_pictures(settings, "manual") == []  # reader not ready: nothing happens
 
     vision.write_status(settings, state="ready", signature=vision._signature(settings), message="ok")
     assert vision.ready(settings)
-    assert schedule.due(conn, "silas", date.today(), True)[1] == "an image-only leaflet waits for the picture reader"
+    assert not schedule.due(conn, "silas", date.today(), True)[0]  # waiting pictures don't make a chain check due
+    pipeline.retry_parses(conn, settings, "silas", {"warnings": [], "errors": []}, log)
+    assert conn.execute("SELECT status FROM issues WHERE id=?", (iid,)).fetchone()[0] == "waiting_parser"
 
     @contextmanager
     def fake_session(s, lg):
@@ -121,8 +125,8 @@ def test_waiting_leaflet_read_when_reader_ready(settings, tmp_path, monkeypatch)
                           crop={"x0": 100, "top": 100, "x1": 400, "bottom": 500})]
         yield read
     monkeypatch.setattr(ollama, "session", fake_session)
-    summary = {"warnings": [], "errors": []}
-    pipeline.retry_parses(conn, settings, "silas", summary, log)
+    runs = job.run_pictures(settings, "manual")
+    assert [r["chain"] for r in runs] == ["silas"] and runs[0]["parsed"][0]["offers"] == 2
     row = conn.execute("SELECT * FROM issues WHERE id=?", (iid,)).fetchone()
     assert (row["status"], row["offers"]) == ("parsed", 2)
     offs = conn.execute("SELECT name, price, image FROM offers WHERE issue_id=? ORDER BY seq", (iid,)).fetchall()
@@ -131,12 +135,13 @@ def test_waiting_leaflet_read_when_reader_ready(settings, tmp_path, monkeypatch)
 
 
 def test_reader_off_keeps_waiting(settings, tmp_path):
-    from leidiniai import pipeline
+    from leidiniai import job, pipeline
     conn = db.open_db(settings)
     iid = _silas_issue(conn, tmp_path, status="parse_failed")
     pipeline.retry_parses(conn, settings, "silas", {"warnings": [], "errors": []}, log)
+    assert job.run_pictures(settings, "night") == []
     row = conn.execute("SELECT status, parse_attempts FROM issues WHERE id=?", (iid,)).fetchone()
-    assert (row["status"], row["parse_attempts"]) == ("waiting_parser", 0)
+    assert (row["status"], row["parse_attempts"]) == ("parse_failed", 0)  # left for the picture reading
 
 
 def test_switching_away_deletes_files(settings):

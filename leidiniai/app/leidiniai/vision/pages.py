@@ -3,8 +3,23 @@ from __future__ import annotations
 
 from pathlib import Path
 
-MAX_SIDE = 1600  # long side of a page picture given to a reader (Šilas pages are 992×1404)
+MAX_SIDE = 1600  # long side of a page picture given to a reader at most
 IMG_EXT = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def native_long_side(page) -> int | None:
+    """Image-only PDF page: long side in pixels of its biggest picture (Šilas: 992×1403 JPEG per page), so the page
+    is not blown up beyond what was printed into it (0.7: 1600 px = 23 % more picture tokens, no more detail)."""
+    import pypdfium2.raw as raw
+    best = None
+    for obj in page.get_objects(filter=(raw.FPDF_PAGEOBJ_IMAGE,), max_depth=2):
+        try:
+            w, h = obj.get_px_size()
+        except Exception:
+            continue
+        if not best or w * h > best[0] * best[1]:
+            best = (w, h)
+    return max(best) if best and min(best) >= 300 else None
 
 
 def page_images(files: list[dict], work: Path, log) -> list[Path]:
@@ -21,7 +36,8 @@ def page_images(files: list[dict], work: Path, log) -> list[Path]:
                 for i in range(len(doc)):
                     page = doc[i]
                     w, h = page.get_size()
-                    img = page.render(scale=MAX_SIDE / max(w, h)).to_pil().convert("RGB")
+                    side = min(MAX_SIDE, native_long_side(page) or MAX_SIDE)
+                    img = page.render(scale=side / max(w, h)).to_pil().convert("RGB")
                     p = work / f"{Path(f['name']).stem}_p{i + 1:02d}.png"
                     img.save(p)
                     out.append(p)
@@ -40,7 +56,7 @@ def page_images(files: list[dict], work: Path, log) -> list[Path]:
     return out
 
 
-def crops(offers, imgs: list[Path], out_dir: Path, pad: int = 6, max_side: int = 640) -> dict[int, str]:
+def crops(offers, imgs: list[Path], out_dir: Path, pad: int = 6, max_side: int = 900) -> dict[int, str]:
     """offer.crop is in pixels of its page picture (offer.page, 1-based). Returns {index: file name}."""
     from PIL import Image
     by_page: dict[int, list[int]] = {}

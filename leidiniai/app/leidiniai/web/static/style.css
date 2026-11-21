@@ -54,3 +54,11 @@ button.small { padding:.15rem .5rem; font-size:.8rem; }
 img.logo { height:22px; max-width:84px; object-fit:contain; vertical-align:middle; }
 td img.logo { height:28px; max-width:120px; }
 .product img.logo { height:26px; }
+
+/* 0.8.0: click on a product picture enlarges it; click again (anywhere on it) closes */
+.product .pimg img.zoomable { cursor:zoom-in; }
+.product .pimg img.zoomable.big { position:fixed; inset:0; margin:auto; width:auto; height:auto; max-width:96vw; max-height:94vh;
+  z-index:50; cursor:zoom-out; box-shadow:0 0 0 100vmax rgba(0,0,0,.78); border:none; }
+.offer span.name a.name { color:var(--muted); }
+.progress { font-size:.85rem; }
+button.link { background:none; border:none; color:var(--accent); padding:0 .3rem; text-decoration:underline; cursor:pointer; }

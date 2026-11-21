@@ -148,6 +148,22 @@ MIGRATIONS: list[str] = [
     UPDATE issues SET status='downloaded', parse_attempts=0
     WHERE chain='iki' AND status='parsed' AND files LIKE '%.pdf%' AND (valid_to IS NULL OR valid_to >= date('now'));
     """,
+    # 6 (0.8.0): picture reader results saved page by page (a restart continues from the next page); PDF leaflets
+    # still valid are read again (short name + Aprašymas, size-only names, Lidl promotion terms)
+    """
+    CREATE TABLE IF NOT EXISTS vision_pages (
+        issue_id INTEGER NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+        page     INTEGER NOT NULL,              -- 1-based page picture
+        sig      TEXT NOT NULL,                 -- reader + model + prompt version + picture size: a change reads again
+        offers   TEXT NOT NULL,                 -- JSON list of Offer.as_dict(), crop in pixels of the page picture
+        seconds  REAL,
+        read_at  TEXT NOT NULL,
+        PRIMARY KEY (issue_id, page)
+    );
+    UPDATE issues SET status='downloaded', parse_attempts=0
+    WHERE chain IN ('iki','lidl','norfa','rimi','vynoteka') AND status='parsed' AND files LIKE '%.pdf%'
+        AND (valid_to IS NULL OR valid_to >= date('now'));
+    """,
 ]
 
 

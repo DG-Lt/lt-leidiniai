@@ -95,8 +95,16 @@ def leaflets():
             chains.append({"chain": c, "state": st, "due": is_due, "reason": reason, "next": nxt.get(c)})
         issues = conn.execute("SELECT * FROM issues ORDER BY COALESCE(valid_to,'9999') DESC, id DESC LIMIT 200").fetchall()
         runs = conn.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 30").fetchall()
+        from ..pipeline import issue_parser, picture_issues
+        pictures = {i["id"] for i in issues if issue_parser(i) == "vision"}
+        pages_read = {r[0]: r[1] for r in conn.execute("SELECT issue_id, COUNT(*) FROM vision_pages GROUP BY issue_id")}
+        waiting_pictures = len(picture_issues(conn))
+    rereading = {i["id"] for i in issues if i["status"] == "parsed" and '"reread": true' in (i["meta"] or "")}
     return render_template("leaflets.html", chains=chains, issues=issues, runs=runs, status_lt=STATUS_LT,
-                           running=runner.current if runner else None)
+                           running=runner.current if runner else None,
+                           activity=runner.activity() if runner else None, reader_ready=vision.ready(s),
+                           pictures=pictures, pages_read=pages_read, rereading=rereading,
+                           waiting_pictures=waiting_pictures)
 
 
 @bp.post("/tikrinti")
@@ -107,4 +115,36 @@ def check_now():
     if runner and (chain == "all" or chain in settings().chains):
         runner.request(chain, "manual")
         flash("Tikrinimas įtrauktas į eilę.", "ok")
+    return redirect(url_for("ui.leaflets"))
+
+
+@bp.post("/paveiksleliai")
+def read_pictures():
+    """"Skaityti paveikslėlius dabar": read the picture leaflets that wait now instead of at night."""
+    from .. import vision
+    runner = current_app.config.get("RUNNER")
+    if not vision.ready(settings()):
+        flash("Paveikslėlių skaitytuvas neparuoštas (parinktis picture_reader, žr. Būsena).", "err")
+    elif runner:
+        runner.request_pictures("manual")
+        flash("Paveikslėlių skaitymas įtrauktas į eilę – prasidės, kai baigsis tikrinimai.", "ok")
+    return redirect(url_for("ui.leaflets"))
+
+
+@bp.post("/leidinys/<int:iid>/skaityti-is-naujo")
+def reread(iid):
+    """"Skaityti iš naujo": read a picture leaflet again from the first page (e.g. after a reader update).
+    Its offers stay until the new reading is saved."""
+    from .. import db, vision
+    from ..pipeline import request_reread
+    with db.session(settings()) as conn:
+        ok = request_reread(conn, iid)
+    runner = current_app.config.get("RUNNER")
+    if not ok:
+        flash("Šio leidinio iš naujo perskaityti negalima.", "err")
+    elif not vision.ready(settings()):
+        flash("Pažymėta skaityti iš naujo – kai paveikslėlių skaitytuvas bus paruoštas.", "ok")
+    elif runner:
+        runner.request_pictures("manual", iid)
+        flash("Leidinys bus perskaitytas iš naujo – prasidės, kai baigsis tikrinimai. Iki tol rodomi seni pasiūlymai.", "ok")
     return redirect(url_for("ui.leaflets"))

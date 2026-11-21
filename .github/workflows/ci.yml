@@ -32,6 +32,8 @@ jobs:
           docker cp tests/synthetic/norfa_synthetic.pdf leidiniai-ci:/tmp/norfa.pdf
           docker exec leidiniai-ci python -m leidiniai.parsers norfa /tmp/norfa.pdf | python3 -c "import json,sys; o=json.load(sys.stdin); assert len(o) == 6, len(o)"
           docker exec leidiniai-ci python -c "from pathlib import Path; from leidiniai.parsers import pdf_text as p; o=p.parse('/tmp/norfa.pdf','norfa'); assert len(p.render_crops('/tmp/norfa.pdf',o,Path('/tmp/c')))==6"
+          # picture reader: product cards are found with the image's Pillow (0.8.0)
+          docker exec leidiniai-ci python -c "from PIL import Image, ImageDraw; from leidiniai.vision import cells; im=Image.new('RGB',(600,800),(229,229,229)); d=ImageDraw.Draw(im); [d.rectangle((20+x*290,20+y*390,290+x*290,390+y*390),fill='white') for x in (0,1) for y in (0,1)]; assert len(cells.find_cells(im))==4"
           # picture reader tools are in the image
           docker exec leidiniai-ci tesseract --version
           docker exec leidiniai-ci zstd --version
@@ -43,5 +45,9 @@ jobs:
           grep -q '"default_entity_id": "button.leidiniai_check_now"' /tmp/mqtt.txt
           grep -q '^leidiniai/status online' /tmp/mqtt.txt
           grep -q '^leidiniai/iki/leaflet/state nėra' /tmp/mqtt.txt
+          grep -q '"default_entity_id": "button.leidiniai_read_pictures"' /tmp/mqtt.txt
+          grep -q '"default_entity_id": "event.leidiniai_watch_hit"' /tmp/mqtt.txt
+          grep -q '^leidiniai/activity/state laukia' /tmp/mqtt.txt
+          grep -q '^leidiniai/picture_reader/state išjungtas' /tmp/mqtt.txt
           docker exec leidiniai-ci sh -c 'grep -c "MQTT: connected" /data/logs/leidiniai.log'
           docker logs leidiniai-ci

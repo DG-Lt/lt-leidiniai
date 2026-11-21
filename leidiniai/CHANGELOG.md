@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.8.0
+**Picture reader (Šilas, Vynoteka drinks)**
+- **Pictures are read at night only, on their own.** A check ("Tikrinti dabar" or the night check) only downloads
+  a picture leaflet; the reading starts after the night's checks and never holds up a check of another shop.
+  New button **Skaityti paveikslėlius dabar** (Leidiniai page and `button.leidiniai_read_pictures`) starts it at once.
+- **Each page is saved as soon as it is read.** After a restart or an update the reading continues from the next
+  page (at once if it is still night). **Skaityti iš naujo** on a picture leaflet reads it again from page 1; its
+  offers stay on show meanwhile. To get the 0.8.0 pictures and dates for Šilas Nr. 23, press it once.
+- **Better offer pictures:** the model's box is moved to the white card the offer is printed on (Šilas pages
+  1–9: 94 cards). Pages without cards keep the model's box with a margin.
+- **Offers' own dates** (Šilas "3D akcija – LAPKRIČIO 19–21 d.") instead of the leaflet's.
+- **Memory:** the local model is unloaded after every page – no more prompt cache growth (0.7.0: ~200 MB a page).
+- **Faster:** page pictures at the leaflet's own size (Šilas 1403 px instead of 1600 px: ~23 % fewer picture
+  tokens, same detail; 1100 px lost too much text in a test), shorter answers (empty fields left out),
+  3 CPU threads while reading pictures.
+- The Ollama log no longer fills up with progress lines.
+
+**Names and details**
+- A name that is only a size ("cm", "24 cm", "2 vnt./rink. ml") shows **pavadinimas neatpažintas – žr. leidinio
+  p. N** with a link to that page; a lone unit after a name is dropped ("Puodelių rinkinys ml").
+- Lidl: promotion terms ("Akcijos limitas vieno pirkimo metu …", "Nuolaidos nesumuojamos", "Pasiūlymas galioja tik
+  nurodytos akcijos metu …"), "Ieškoti šaldytuve", "Atsiprašome, šios prekės laikinai neturime" and product codes
+  are left out of names.
+- Long names are cut at the first full stop; the rest is the **Aprašymas** on the details page. Search and the
+  watch list look at both.
+- Details page: link to the **original leaflet at the offer's page** (while the file is kept) and to the leaflet
+  on the shop's site; click the picture to enlarge it.
+- PDF leaflets still valid are read again from the stored files at the next night check (new name rules).
+
+**Home Assistant**
+- `sensor.leidiniai_activity` ("laukia", "tikrinamas IKI", "Šilas: puslapis 3/12").
+- `sensor.leidiniai_picture_reader` (paruoštas / ruošiamas / klaida / išjungtas, with the download progress).
+- `event.leidiniai_watch_hit`: once per new watched offer (name, chain, price, discount, dates, link).
+- Leaflet sensors: attribute `short_title` ("Maisto prekės", "Leidinys Nr. 23") for dashboard tables.
+- Documentation: dashboard rows for the new entities and a watched-offer notification example.
+
 ## 0.7.0
 - **New chain: Vynoteka** (https://vynoteka.lt/). **Already installed? Tick `vynoteka` under Chains in the
   Configuration tab** – an existing chain list is not changed by an update.
