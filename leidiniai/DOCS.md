@@ -18,11 +18,16 @@ Open the **Leidiniai** panel in the sidebar. Options are explained in the Config
   search and the watch list look at both.
   The details page links to the **original leaflet at the offer's page** (while the file is kept, `keep_pdf_weeks`)
   and to the leaflet on the shop's site; click the picture to enlarge it.
+  **Atsargoms** shows only long-life (📦) or frozen (❄️) products at a really good price (discount ≥ 30 % or at
+  most 5 % above the lowest price the app has seen for that product); the word lists and numbers are on **Būsena →
+  Atsargoms**.
   **Besibaigiantys** shows only offers ending within `ending_soon_days` (default 3, today included); their end
   date is highlighted everywhere.
 - **Stebimi** – the watch list: words to look for in every new leaflet, with the matching offers. All words must be
   in the name, in any order ("Natura aliejus" finds "Saulėgrąžų aliejus NATURA"); **Tikslus žodis** per word
-  matches whole words only. **Pagal žodį** groups by word, **Pagal tinklą** by shop (most watched offers first – the
+  matches whole words only. **Nutildyti** (1–10 weeks) stops a word from highlighting, counting and sending events for a while
+  (e.g. after stocking up on pasta). Groups fold open and closed; the state is remembered in the browser.
+  **Pagal žodį** groups by word, **Pagal tinklą** by shop (most watched offers first – the
   shop worth the trip).
 - **Leidiniai** – leaflets found, their state, the last checks (click one for its summary), what runs now, a
   "check now" button, **Skaityti paveikslėlius dabar** and, on a picture leaflet, **Skaityti iš naujo** (see

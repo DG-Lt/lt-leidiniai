@@ -51,4 +51,12 @@ def duration(seconds) -> str:
     return f"{h} h {m} min"
 
 
-FILTERS = {"number": number, "money": money_cents, "day": day, "dt": dt, "duration": duration}
+def fromjson(s):
+    import json
+    try:
+        return json.loads(s or '{}')
+    except ValueError:
+        return {}
+
+
+FILTERS = {"fromjson": fromjson, "number": number, "money": money_cents, "day": day, "dt": dt, "duration": duration}

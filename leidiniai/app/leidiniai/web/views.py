@@ -24,8 +24,27 @@ def status():
     reader = vision.read_status(s)
     if s.picture_reader == "none":
         reader = {"state": "off", "message": "išjungtas (parinktis picture_reader)"}
+    from .. import db, stock
+    with db.session(s) as conn:
+        stock_rules = stock.rules(conn)
     return render_template("status.html", options=s.public(), log_tail=logs.tail(s, 150), mqtt=mqtt,
-                           run_files=len(logs.run_summary_files(s)), logo_rows=logo_rows, reader=reader)
+                           run_files=len(logs.run_summary_files(s)), logo_rows=logo_rows, reader=reader,
+                           stock_rules=stock_rules)
+
+
+@bp.post("/atsargoms")
+def stock_rules_save():
+    """Būsena → Atsargoms: word lists and the "really good price" numbers."""
+    from .. import db, stock
+    with db.session(settings()) as conn:
+        if request.form.get("reset"):
+            db.kv_set(conn, "stock_rules", {})
+            flash("Atsargoms taisyklės atstatytos į numatytąsias.", "ok")
+        else:
+            r = stock.save_rules(conn, request.form)
+            flash(f"Atsargoms taisyklės išsaugotos: {len(r['long'])} ilgai laikomų, {len(r['frozen'])} šaldytų, "
+                  f"{len(r['exclude'])} išimčių žodžių.", "ok")
+    return redirect(url_for("ui.status") + "#atsargoms")
 
 
 @bp.post("/logotipai/<chain>")

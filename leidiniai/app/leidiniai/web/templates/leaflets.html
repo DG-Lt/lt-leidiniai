@@ -31,6 +31,7 @@
     <td>{% if i.source_url %}<a href="{{ i.source_url }}" target="_blank" rel="noopener">{{ i.title }}</a>{% else %}{{ i.title }}{% endif %}</td>
     <td>{{ i.valid_from|day }} – {{ i.valid_to|day }}</td>
     <td class="{{ 'err' if i.status in ('failed', 'parse_failed') }}" title="{{ i.error or '' }}">{{ status_lt.get(i.status, i.status) }}{% if i.id in rereading %} <span class="muted">(laukia skaitymo iš naujo)</span>{% endif %}
+      {% set m = (i.meta or '{}')|fromjson %}{% if m.reread_error %} <span class="err" title="{{ m.reread_error }}">– skaityti iš naujo nepavyko</span>{% endif %}{% if m.failed_pages %} <span class="warn">– neperskaityti psl. {{ m.failed_pages|join(', ') }}</span>{% endif %}
       {% if i.id in pictures and pages_read.get(i.id) and i.status != 'parsed' %}<span class="muted progress">– perskaityta {{ pages_read[i.id] }} psl.</span>{% endif %}
       {% if i.id in pictures and i.status in ('parsed', 'parse_failed', 'waiting_parser') and i.id not in rereading %}
       <form method="post" action="{{ url_for('ui.reread', iid=i.id) }}" class="inline" onsubmit="return confirm('Skaityti šį leidinį iš naujo nuo pirmo puslapio?')"><button class="link small">Skaityti iš naujo</button></form>{% endif %}</td>

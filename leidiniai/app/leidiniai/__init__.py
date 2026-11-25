@@ -1,6 +1,6 @@
 """Leidiniai – Lithuanian discount leaflets collector (Home Assistant app)."""
 
-__version__ = "0.8.1"
+__version__ = "0.8.2"
 
 CHAINS = ("iki", "lidl", "maxima", "norfa", "rimi", "silas", "vynoteka")
 

@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.8.2
+**Picture reader**
+- A cut-off answer no longer fails the leaflet (Šilas Nr. 23 page 2 hit the answer-length limit three nights in a
+  row, so the 0.8.0 reading never replaced the old one). The complete offers are kept and the page is read again
+  in two overlapping halves; offers seen twice are kept once.
+- A page that still can't be read is skipped: the other pages are saved, the leaflet shows "neperskaityti psl. N" and
+  the page is tried again at the next picture reading. A failed re-read shows on the Leidiniai row.
+- Both go to `binary_sensor.leidiniai_problem`. The model's raw answer for a cut-off page is kept in the logs ZIP
+  (`vision-raw/`).
+- Šilas Nr. 23 (and any picture leaflet that gave up) gets three new tries.
+- Picture offers no longer show an empty red discount badge.
+
+**Stebimi**
+- **Nutildyti** per word for 1–10 weeks: a muted word doesn't highlight, count (Pagal tinklą, HA sensor), sort first
+  or send `watch_hit` events; it moves to the bottom, greyed out, and switches back on by itself. "Atšaukti
+  nutildymą" ends it early.
+- Groups are **collapsible** (word or shop name and counts in the heading); open/closed is remembered in this
+  browser. Muted words start closed.
+
+**Atsargoms**
+- Badge **📦 Atsargoms** (frozen: **❄️ Atsargoms**) on offer cards and the details page: a long-life (or frozen)
+  product at a really good price – discount ≥ 30 % or at most 5 % above its lowest price seen in the app.
+- Filter **Atsargoms** in Pasiūlymai.
+- Word lists (long-life, frozen, exceptions) and both numbers are edited on **Būsena → Atsargoms**.
+
+**Būsena**: sections are collapsible, state remembered.
+
 ## 0.8.1
 **Stebimi (watch list)**
 - A watched word list now matches when **every word** is in the name, **in any order**: "Natura aliejus" finds

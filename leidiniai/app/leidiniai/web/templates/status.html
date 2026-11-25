@@ -2,6 +2,9 @@
 {% block title %}Būsena – Leidiniai{% endblock %}
 {% block content %}
 <h1>Būsena</h1>
+<details class="acc" data-keep="busena-busena" open>
+<summary>Būsena</summary>
+<div class="body">
 <div class="card">
 <table>
   <tr><th>Versija</th><td>{{ version }}</td></tr>
@@ -10,8 +13,31 @@
   {% for k, v in options.items() %}<tr><th>{{ k }}</th><td>{{ v }}</td></tr>{% endfor %}
 </table>
 </div>
+</div>
+</details>
 
-<h2 id="logotipai">Tinklų logotipai</h2>
+<details class="acc" data-keep="busena-atsargoms" id="atsargoms">
+<summary>Atsargoms <span class="muted small">– {{ stock_rules.long|length }} ilgai laikomų, {{ stock_rules.frozen|length }} šaldytų žodžių; nuolaida ≥ {{ stock_rules.min_discount }} % arba ≤ {{ stock_rules.near_low_pct }} % virš mažiausios kainos</span></summary>
+<div class="body">
+<p class="muted small">Ženkliukas „📦 Atsargoms“ (šaldytiems „❄️“): pavadinime yra ilgai laikomos prekės žodis ir nėra išimties žodžio,
+  <b>ir</b> kaina tikrai gera – nuolaida ne mažesnė už nurodytą arba kaina ne daugiau kaip nurodytais procentais viršija tos prekės
+  mažiausią kainą programos istorijoje. Žodžiai be lietuviškų raidžių, po vieną eilutėje; tinka žodžio pradžia („makaron“ ras „makaronai“).</p>
+<form method="post" action="{{ url_for('ui.stock_rules_save') }}">
+  <div class="grid3">
+    <label>Ilgai laikomos prekės<textarea class="words" name="long">{{ stock_rules.long|join('\n') }}</textarea></label>
+    <label>Šaldytos prekės<textarea class="words" name="frozen">{{ stock_rules.frozen|join('\n') }}</textarea></label>
+    <label>Išimtys (ne atsargoms)<textarea class="words" name="exclude">{{ stock_rules.exclude|join('\n') }}</textarea></label>
+  </div>
+  <p><label>Nuolaida ne mažiau kaip <input type="number" name="min_discount" min="5" max="90" value="{{ stock_rules.min_discount }}" style="width:5rem"> %</label>
+     <label>arba kaina ne daugiau kaip <input type="number" name="near_low_pct" min="0" max="50" value="{{ stock_rules.near_low_pct }}" style="width:5rem"> % virš mažiausios</label></p>
+  <button>Išsaugoti</button> <button class="secondary" name="reset" value="1" onclick="return confirm('Atstatyti numatytąsias taisykles?')">Numatytosios</button>
+</form>
+</div>
+</details>
+
+<details class="acc" data-keep="busena-logotipai" id="logotipai">
+<summary>Tinklų logotipai</summary>
+<div class="body">
 <p class="muted small">Rodomi pasiūlymų kortelėse. Atsisiunčiami iš tinklo svetainės po pirmo tikrinimo; savo failą (PNG, JPG, WEBP, SVG, iki 512 KB)
 galite įkelti – jis visada naudojamas vietoj atsisiųsto. Tuščios paraštės aplink logotipą nukerpamos automatiškai.</p>
 <div class="card">
@@ -29,8 +55,12 @@ galite įkelti – jis visada naudojamas vietoj atsisiųsto. Tuščios paraštė
   {% endfor %}
 </table>
 </div>
+</div>
+</details>
 
-<h2>Žurnalai</h2>
+<details class="acc" data-keep="busena-zurnalai" open>
+<summary>Žurnalai</summary>
+<div class="body">
 <p>
   <a class="btn" href="{{ url_for('ui.logs_zip') }}" download>Atsisiųsti žurnalus</a>
   <span class="muted small">ZIP: žurnalo failai, paskutinių 20 tikrinimų santraukos ir aplinkos aprašas (be slaptažodžių).
@@ -43,4 +73,6 @@ galite įkelti – jis visada naudojamas vietoj atsisiųsto. Tuščios paraštė
 {% endfor %}</pre>
 </details>
 {% else %}<p class="muted">Žurnalas dar tuščias.</p>{% endif %}
+</div>
+</details>
 {% endblock %}

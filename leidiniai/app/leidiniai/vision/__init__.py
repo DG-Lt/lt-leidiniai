@@ -169,7 +169,8 @@ def offer_dates(offers, issue) -> None:
             o.valid_from, o.valid_to = a or o.valid_from, b or o.valid_to
 
 
-def parse_issue(settings, issue, files: list[dict], log, conn=None, progress=lambda page, pages: None):
+def parse_issue(settings, issue, files: list[dict], log, conn=None, progress=lambda page, pages: None,
+                failed_pages: list | None = None):
     """Read an image-only leaflet. Returns (offers, {offer index: crop path relative to img_dir}).
 
     With `conn`, each page's result is saved as soon as it is read (table vision_pages) and pages already read with
@@ -186,7 +187,7 @@ def parse_issue(settings, issue, files: list[dict], log, conn=None, progress=lam
         raise NoPictures("no page pictures stored for this leaflet")
     reader = _reader(settings)
     base_sig = reader.signature(settings)
-    offers = []
+    offers, failed = [], []
     try:
         with contextlib.ExitStack() as stack:
             read_page = None
@@ -204,7 +205,13 @@ def parse_issue(settings, issue, files: list[dict], log, conn=None, progress=lam
                     if read_page is None:
                         read_page = stack.enter_context(reader.session(settings, log))
                     t = time.monotonic()
-                    got = read_page(img, n, issue["chain"])
+                    try:
+                        got = read_page(img, n, issue["chain"])
+                    except Exception as e:  # one bad page must not lose the leaflet (0.8.1: Šilas page 2)
+                        log.warning("%s %s: page %d/%d not read: %s", issue["chain"], issue["key"], n, len(imgs), e)
+                        failed.append(n)
+                        progress(n, len(imgs))
+                        continue
                     secs = time.monotonic() - t
                     log.info("%s %s: page %d/%d – %d offer(s) in %.0f s", issue["chain"], issue["key"], n, len(imgs),
                              len(got), secs)
@@ -216,7 +223,11 @@ def parse_issue(settings, issue, files: list[dict], log, conn=None, progress=lam
                                           round(secs, 1), now_iso()))
                 place_offers(got, img)
                 offers += got
+        if failed and len(failed) == len(imgs):
+            raise RuntimeError(f"no page could be read (pages {', '.join(map(str, failed))})")
         offer_dates(offers, issue)
+        if failed_pages is not None:
+            failed_pages += failed  # pipeline.parse_stored: warning + issue meta
         out_dir = settings.img_dir / rel
         if out_dir.exists():
             shutil.rmtree(out_dir)

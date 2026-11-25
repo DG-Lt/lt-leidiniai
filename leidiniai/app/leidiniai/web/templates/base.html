@@ -23,5 +23,20 @@
 {% endwith %}
 {% block content %}{% endblock %}
 </main>
+<script>
+/* 0.8.2: open/closed state of <details data-keep="…"> sections kept per browser (Stebimi groups, Būsena sections) */
+(function () {
+  var store = {};
+  try { store = JSON.parse(localStorage.getItem('leidiniai_open') || '{}'); } catch (e) {}
+  document.querySelectorAll('details[data-keep]').forEach(function (d) {
+    var k = d.getAttribute('data-keep');
+    if (k in store) d.open = !!store[k];
+    d.addEventListener('toggle', function () {
+      store[k] = d.open;
+      try { localStorage.setItem('leidiniai_open', JSON.stringify(store)); } catch (e) {}
+    });
+  });
+})();
+</script>
 </body>
 </html>

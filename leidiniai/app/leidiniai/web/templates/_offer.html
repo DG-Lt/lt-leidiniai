@@ -10,6 +10,7 @@
     {% if o.kind == 'catalogue' %}<span class="badge" title="Įprasta kaina iš katalogo, ne nuolaida">katalogas</span>{% endif %}
     {% if o.card %}<span class="badge card" title="{{ o.card_text or '' }}">kortelė</span>{% endif %}
     {% if watched %}<span class="badge watch" title="Stebima">★</span>{% endif %}
+    {% set sb = stock_badge(o) %}{% if sb == 'long' %}<span class="badge stock" title="Ilgai laikosi ir labai gera kaina – verta pirkti atsargų">📦 Atsargoms</span>{% elif sb == 'frozen' %}<span class="badge stock frozen" title="Šaldytas, ilgai laikosi ir labai gera kaina – reikia vietos šaldiklyje">❄️ Atsargoms</span>{% endif %}
   </div>
   {% set fl = flags_of(o) %}
   {% if not o.name or 'weak_name' in fl or 'no_name' in fl %}

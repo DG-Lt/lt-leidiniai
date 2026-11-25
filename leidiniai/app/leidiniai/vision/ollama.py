@@ -288,7 +288,7 @@ def offers_from_json(data: dict, pno: int, chain: str, size: tuple[int, int]) ->
         o.price = _cents(it.get("price"))
         o.old_price = _cents(it.get("old", it.get("old_price")))
         d = it.get("disc", it.get("discount"))
-        if isinstance(d, str) and d.strip():
+        if isinstance(d, str) and re.search(r"\d", d):
             o.discount_text = d.strip().replace("–", "-").replace(" ", "")
         o.unit_price = _cents(it.get("unit_price"))
         u = it.get("unit")
@@ -318,27 +318,129 @@ def offers_from_json(data: dict, pno: int, chain: str, size: tuple[int, int]) ->
     return out
 
 
-def read_page(url: str, model: str, img: Path, pno: int, chain: str, threads: int,
-              keep_alive: str | int = 0) -> list[Offer]:
-    """One page. keep_alive 0 (local): the model is unloaded after the page, which also drops llama-server's
-    prompt cache (0.7.0: +~200 MB per page, 8 GB allowed). Loading it again takes seconds; a page takes minutes."""
-    from PIL import Image
-    size = Image.open(img).size
+class PageCut(Exception):
+    """The answer was cut off (answer-length limit) even after reading the page in halves."""
+
+
+def salvage(content: str) -> tuple[dict, bool]:
+    """Answer → (data, complete). A cut-off answer keeps every offer that was complete before the cut
+    (Šilas Nr. 23 page 2, 0.8.1: 3 072 tokens, "Expecting ',' delimiter")."""
+    try:
+        return json.loads(content), True
+    except ValueError:
+        pass
+    i = content.find("[")
+    if i < 0:
+        return {"offers": []}, False
+    depth, in_str, esc, last = 0, False, False, None
+    for k in range(i + 1, len(content)):
+        ch = content[k]
+        if in_str:
+            esc = (ch == "\\" and not esc)
+            if ch == '"' and not esc:
+                in_str = False
+            elif ch != "\\":
+                esc = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch in "{[":
+            depth += 1
+        elif ch in "}]":
+            depth -= 1
+            if depth == 0 and ch == "}":
+                last = k
+            if depth < 0:
+                break
+    if last is None:
+        return {"offers": []}, False
+    try:
+        return json.loads(content[:last + 1] + "]}"), False
+    except ValueError:
+        return {"offers": []}, False
+
+
+def _ask(url, model, img_bytes, chain, threads, keep_alive) -> tuple[dict, bool, str]:
     body = {
         "model": model, "stream": False, "format": SCHEMA, "keep_alive": keep_alive,
         "messages": [{"role": "user", "content": PROMPT.format(chain=chain),
-                      "images": [base64.b64encode(img.read_bytes()).decode()]}],
-        "options": {"temperature": 0, "num_ctx": 8192, "num_predict": 3072, "num_thread": threads},
+                      "images": [base64.b64encode(img_bytes).decode()]}],
+        "options": {"temperature": 0, "num_ctx": 8192, "num_predict": NUM_PREDICT, "num_thread": threads,
+                    "repeat_penalty": 1.05},
     }
     r = requests.post(url + "/api/chat", json=body, timeout=(15, PAGE_TIMEOUT))
     r.raise_for_status()
-    content = r.json().get("message", {}).get("content") or "{}"
+    j = r.json()
+    content = j.get("message", {}).get("content") or "{}"
+    data, complete = salvage(content)
+    if j.get("done_reason") == "length":
+        complete = False
+    return data, complete, content
+
+
+NUM_PREDICT = 3072
+HALF_OVERLAP = 0.12   # halves overlap by this share of the page height (an offer on the cut is whole in one half)
+
+
+def read_page(url: str, model: str, img: Path, pno: int, chain: str, threads: int,
+              keep_alive: str | int = 0, raw_dir: Path | None = None) -> list[Offer]:
+    """One page. keep_alive 0 (local): the model is unloaded after the page, which also drops llama-server's
+    prompt cache (0.7.0: +~200 MB per page, 8 GB allowed). Loading it again takes seconds; a page takes minutes.
+    A cut-off answer (0.8.2): the complete offers are kept and the page is read again as a top and a bottom half
+    (overlapping); offers seen in both are kept once."""
+    import io
+
+    from PIL import Image
+    im = Image.open(img).convert("RGB")
+    W, H = im.size
+    data, complete, raw = _ask(url, model, img.read_bytes(), chain, threads, keep_alive)
+    offers = offers_from_json(data, pno, chain, (W, H))
+    if complete:
+        return offers
+    _save_raw(raw_dir, chain, pno, "page", raw)
+    halves, cut = [], False
+    mid = H // 2
+    ov = int(H * HALF_OVERLAP / 2)
+    for top, bottom in ((0, min(H, mid + ov)), (max(0, mid - ov), H)):
+        part = im.crop((0, top, W, bottom))
+        buf = io.BytesIO()
+        part.save(buf, "JPEG", quality=92)
+        d, ok, raw = _ask(url, model, buf.getvalue(), chain, threads, keep_alive)
+        if not ok:
+            cut = True
+            _save_raw(raw_dir, chain, pno, f"half{top}", raw)
+        for o in offers_from_json(d, pno, chain, part.size):
+            if o.crop:
+                o.crop = {**o.crop, "top": o.crop["top"] + top, "bottom": o.crop["bottom"] + top}
+            halves.append(o)
+    merged = _dedupe(halves + offers)
+    if cut and not merged:
+        raise PageCut(f"page {pno}: the answer was cut off even in halves")
+    for o in merged:
+        o.extra["read"] = "halves"
+    return merged
+
+
+def _dedupe(offers: list[Offer]) -> list[Offer]:
+    from ..textutil import fold
+    out, seen = [], set()
+    for o in offers:
+        k = (fold(o.name)[:40], o.price, o.discount_text)
+        if k in seen:
+            continue
+        seen.add(k)
+        out.append(o)
+    return out
+
+
+def _save_raw(raw_dir, chain, pno, what, raw) -> None:
+    if not raw_dir:
+        return
     try:
-        data = json.loads(content)
-    except ValueError:
-        m = re.search(r"\{.*\}", content, re.S)
-        data = json.loads(m.group(0)) if m else {}
-    return offers_from_json(data, pno, chain, size)
+        raw_dir.mkdir(parents=True, exist_ok=True)
+        (raw_dir / f"{chain}-p{pno:02d}-{what}.txt").write_text(raw or "", encoding="utf-8")
+    except OSError:
+        pass
 
 
 def signature(settings) -> str:
@@ -355,7 +457,8 @@ def session(settings, log):
         threads = max(settings.threads, min(PICTURE_THREADS, (os.cpu_count() or 4) - 1))
         # an external Ollama (a PC) keeps its model loaded between pages as usual
         keep = 0 if not settings.ollama_url else "2m"
-        yield lambda img, pno, chain: read_page(url, settings.ollama_model, img, pno, chain, threads, keep)
+        raw_dir = settings.log_dir / "vision-raw"
+        yield lambda img, pno, chain: read_page(url, settings.ollama_model, img, pno, chain, threads, keep, raw_dir)
     finally:
         if proc:
             stop_local(settings, log, proc)

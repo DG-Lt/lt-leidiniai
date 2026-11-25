@@ -87,7 +87,7 @@ def watched_on_sale(conn, today: date, mark_hits: bool = False, ending_days: int
     """Offers valid today whose name matches a watch term (watchmatch: every word, any order; Tikslus žodis)."""
     from . import watchmatch
     t = today.isoformat()
-    terms = conn.execute("SELECT * FROM watch ORDER BY term").fetchall()
+    terms = watchmatch.active(conn.execute("SELECT * FROM watch ORDER BY term").fetchall(), today)
     if not terms:
         return 0, {"terms": 0, "items": []}
     rows = conn.execute(
@@ -131,6 +131,14 @@ def problems(conn, chains, today: date) -> list[str]:
                           " AND status IN ('failed','parse_failed') AND (valid_to IS NULL OR valid_to >= ?)", (*chains, t)):
         what = "neatsisiųstas" if r["status"] == "failed" else "neperskaitytas"
         out.append(f"{CHAIN_NAMES[r['chain']]} „{r['title']}“ {what}: {(r['error'] or '')[:200]}")
+    for r in conn.execute(f"SELECT chain, title, meta FROM issues WHERE chain IN ({q}) AND status='parsed'"
+                          " AND (json_extract(meta,'$.reread_error') IS NOT NULL OR json_extract(meta,'$.failed_pages') IS NOT NULL)"
+                          " AND (valid_to IS NULL OR valid_to >= ?)", (*chains, t)):
+        m = json.loads(r["meta"] or "{}")
+        if m.get("reread_error"):
+            out.append(f"{CHAIN_NAMES[r['chain']]} „{r['title']}“ neperskaitytas iš naujo: {m['reread_error'][:200]}")
+        if m.get("failed_pages"):
+            out.append(f"{CHAIN_NAMES[r['chain']]} „{r['title']}“: neperskaityti puslapiai {', '.join(map(str, m['failed_pages']))}")
     return out
 
 
@@ -168,7 +176,7 @@ def watch_hits(conn, today: date) -> list[dict]:
     a leaflet does not make its offers new). Each: one event.leidiniai_watch_hit (mqtt.Bridge.announce_watch_hits)."""
     from . import watchmatch
     t = today.isoformat()
-    terms = conn.execute("SELECT * FROM watch ORDER BY created").fetchall()
+    terms = watchmatch.active(conn.execute("SELECT * FROM watch ORDER BY created").fetchall(), today)
     if not terms:
         return []
     rows = conn.execute("SELECT o.*, i.title AS issue_title, i.first_seen FROM offers o JOIN issues i ON i.id=o.issue_id"
