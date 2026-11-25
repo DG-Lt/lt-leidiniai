@@ -268,12 +268,16 @@ def test_reading_continues_from_the_next_page(settings, tmp_path, monkeypatch):
     calls = []
     fake_reader(monkeypatch, calls, fail_on=3)
     runs = job.run_pictures(settings, "night")
-    assert runs[0]["status"] == "error" and calls == ["start", 1, 2]
+    # 0.8.2: a page that fails no longer fails the leaflet – the others are saved, the page is retried next time
+    assert runs[0]["status"] == "warning" and calls == ["start", 1, 2]
     assert [r[0] for r in conn.execute("SELECT page FROM vision_pages WHERE issue_id=?", (iid,))] == [1, 2]
+    row = conn.execute("SELECT status, offers, meta FROM issues WHERE id=?", (iid,)).fetchone()
+    assert (row["status"], row["offers"], json.loads(row["meta"])["failed_pages"]) == ("parsed", 2, [3])
     calls.clear()
     fake_reader(monkeypatch, calls)
     runs = job.run_pictures(settings, "resume")
     assert calls == ["start", 3]  # pages 1 and 2 were not read again
+    assert "failed_pages" not in json.loads(conn.execute("SELECT meta FROM issues WHERE id=?", (iid,)).fetchone()[0])
     row = conn.execute("SELECT status, offers FROM issues WHERE id=?", (iid,)).fetchone()
     assert (row["status"], row["offers"]) == ("parsed", 3)
     o1 = conn.execute("SELECT * FROM offers WHERE issue_id=? AND page=1", (iid,)).fetchone()

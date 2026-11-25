@@ -51,3 +51,17 @@ def _exact(term) -> bool:
         return bool(term["exact"])
     except (KeyError, IndexError):
         return False
+
+
+def muted(term, today=None) -> bool:
+    """Nutildyti (0.8.2): muted words do not highlight, count, sort first or send events until `muted_until`."""
+    from datetime import date
+    try:
+        until = term["muted_until"]
+    except (KeyError, IndexError):
+        return False
+    return bool(until) and until >= (today or date.today()).isoformat()
+
+
+def active(terms, today=None) -> list:
+    return [t for t in terms if not muted(t, today)]

@@ -168,6 +168,18 @@ MIGRATIONS: list[str] = [
     """
     ALTER TABLE watch ADD COLUMN exact INTEGER NOT NULL DEFAULT 0;
     """,
+    # 8 (0.8.2): watched word muted until a date (Nutildyti 1–10 weeks)
+    """
+    ALTER TABLE watch ADD COLUMN muted_until TEXT;
+    """,
+    # 9 (0.8.2): picture leaflets whose re-reading gave up (0.8.1: a cut-off answer failed the whole leaflet) get
+    # three new tries with the 0.8.2 reader (cut-off answers kept, page read in halves)
+    """
+    UPDATE issues SET parse_attempts=0
+    WHERE json_extract(meta, '$.reread') AND status IN ('parsed','parse_failed') AND (valid_to IS NULL OR valid_to >= date('now'));
+    UPDATE issues SET status='waiting_parser', parse_attempts=0
+    WHERE status='parse_failed' AND (chain='silas' OR json_extract(meta, '$.parser')='vision') AND (valid_to IS NULL OR valid_to >= date('now'));
+    """,
 ]
 
 

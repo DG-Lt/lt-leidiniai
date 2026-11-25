@@ -38,8 +38,10 @@ def mqtt_refresh():
         m.refresh()
 
 
-def watch_terms(conn) -> list:
-    return conn.execute("SELECT * FROM watch ORDER BY term").fetchall()
+def watch_terms(conn, include_muted: bool = False) -> list:
+    """Watched words; muted ones (Nutildyti) only when asked for (the Stebimi page lists them)."""
+    terms = conn.execute("SELECT * FROM watch ORDER BY term").fetchall()
+    return terms if include_muted else watchmatch.active(terms)
 
 
 def watched(name_key: str, chain: str, terms) -> bool:
@@ -78,7 +80,7 @@ def _filters(args):
             "sort": args.get("sort") if args.get("sort") in SORTS else "disc",
             "disc": "1" if args.get("disc") == "1" else "", "nocard": "1" if args.get("nocard") == "1" else "",
             "top": "1" if args.get("top") == "1" else "", "exact": "1" if args.get("exact") == "1" else "",
-            "ending": "1" if args.get("ending") == "1" else ""}
+            "ending": "1" if args.get("ending") == "1" else "", "stock": "1" if args.get("stock") == "1" else ""}
 
 
 def _where(f, today: date, with_chain: bool = True) -> tuple[str, list]:
@@ -100,6 +102,12 @@ def _where(f, today: date, with_chain: bool = True) -> tuple[str, list]:
         where += " AND (o.discount_pct > 0 OR o.discount_text IS NOT NULL)"
     if f["nocard"]:
         where += " AND o.card=0"
+    if f["stock"]:  # "Atsargoms": long-life (or frozen) at a really good price (stock.py)
+        from .. import stock
+        with db.session(settings()) as c2:
+            cond, sa = stock.sql(stock.rules(c2))
+        where += " AND " + cond
+        a += sa
     if f["ending"]:  # "Besibaigiantys": ends within ending_soon_days (today included)
         where += " AND o.valid_to IS NOT NULL AND o.valid_to >= ? AND o.valid_to <= ?"
         a += [today.isoformat(), (today + timedelta(days=ending_days())).isoformat()]
@@ -133,6 +141,7 @@ def query_offers(conn, args, today: date):
         order = f"{expr} DESC, {order}"
     rows = conn.execute(f"SELECT o.*, i.title AS issue_title, i.source_url, i.files AS issue_files {base} ORDER BY {order}"
                         f" LIMIT {PAGE_SIZE} OFFSET {(page - 1) * PAGE_SIZE}", a + oa).fetchall()
+    g_stock(conn, rows)
     w2, a2 = _where(f, today, with_chain=False)
     counts = {r[0]: r[1] for r in conn.execute(
         f"SELECT o.chain, COUNT(*) FROM offers o JOIN issues i ON i.id=o.issue_id WHERE {w2} GROUP BY o.chain", a2)}
@@ -176,9 +185,27 @@ def offer_original(o) -> str | None:
         return None
 
 
+def g_stock(conn, rows) -> None:
+    """Atsargoms badges for these rows (stock.annotate), read by the cards through `stock_badge`."""
+    from flask import g
+
+    from .. import stock
+    have = getattr(g, "stock_badges", {})
+    have.update(stock.annotate(conn, rows))
+    g.stock_badges = have
+
+
+def stock_badge(o) -> str | None:
+    from flask import g
+    try:
+        return getattr(g, "stock_badges", {}).get(o["id"])
+    except (KeyError, IndexError, TypeError):
+        return None
+
+
 def ctx():
     return {"CATEGORIES": CATEGORIES, "image_url": image_url, "logo_url": logo_url, "SORT_LT": SORT_LT, "WHEN_LT": WHEN_LT, "flags_of": flags_of, "extra_of": extra_of,
-            "offer_original": offer_original, "today_iso": date.today().isoformat(), "ending_soon": ending_soon,
+            "offer_original": offer_original, "today_iso": date.today().isoformat(), "ending_soon": ending_soon, "stock_badge": stock_badge,
             "ending_days": ending_days()}
 
 
@@ -267,6 +294,7 @@ def product(pid):
                             " FROM offers o JOIN issues i ON i.id=o.issue_id"
                             " WHERE o.product_id=? ORDER BY COALESCE(o.valid_from, i.first_seen) DESC, o.id DESC", (pid,)).fetchall()
         originals = {h["id"]: original_link({"id": h["issue_id"], "files": h["issue_files"]}, h["page"]) for h in hist}
+        g_stock(conn, hist)
         same = []
         if p["name_key"] and not p["ident"].startswith("~"):
             same = conn.execute("SELECT p.*, (SELECT MIN(o.price) FROM offers o WHERE o.product_id=p.id AND (o.valid_to IS NULL OR o.valid_to>=?))"
@@ -308,13 +336,18 @@ def watch():
         view = "zodis"
     today = date.today()
     with db.session(settings()) as conn:
-        terms = watch_terms(conn)
+        all_terms = watch_terms(conn, include_muted=True)
         where, a = current_where(today, "all")
         rows = conn.execute(f"SELECT o.*, i.title AS issue_title, i.files AS issue_files FROM offers o JOIN issues i ON i.id=o.issue_id WHERE {where}"
                             " ORDER BY o.price IS NULL, o.price", a).fetchall()
-    found = [(r, watchmatch.matching_terms(terms, r["name_key"], r["chain"])) for r in rows]
+        rows = [r for r in rows if watchmatch.matching_terms(all_terms, r["name_key"], r["chain"])]
+        g_stock(conn, rows)
+    active = watchmatch.active(all_terms, today)
+    # muted words last on Pagal žodį; they do not count in Pagal tinklą
+    terms = active + [t for t in all_terms if t not in active]
+    hits = {t["id"]: [r for r in rows if watchmatch.matches(t, r["name_key"], r["chain"])] for t in all_terms}
+    found = [(r, watchmatch.matching_terms(active, r["name_key"], r["chain"])) for r in rows]
     found = [(r, ts) for r, ts in found if ts]
-    hits = {t["id"]: [r for r, ts in found if t in ts] for t in terms}
     by_chain: dict[str, dict] = {}
     for r, ts in found:
         g = by_chain.setdefault(r["chain"], {"chain": r["chain"], "offers": [], "terms": {}})
@@ -323,7 +356,7 @@ def watch():
             g["terms"][t["term"]] = g["terms"].get(t["term"], 0) + 1
     chains = sorted(by_chain.values(), key=lambda g: (-len(g["offers"]), CHAIN_NAMES[g["chain"]]))
     resp = make_response(render_template("watch.html", terms=terms, hits=hits, chains=chains, view=view, views=VIEWS,
-                                         **ctx()))
+                                         muted=lambda t: watchmatch.muted(t, today), **ctx()))
     if request.args.get("view") in VIEWS:
         resp.set_cookie("stebimi_view", view, max_age=365 * 86400, samesite="Lax")
     return resp
@@ -351,6 +384,22 @@ def watch_add():
     flash(f"Stebima: „{term}“{' (tikslus žodis)' if exact else ''}.", "ok")
     safe = back.startswith("/") and not back.startswith("//")
     return redirect(back if safe else url_for("offers.watch"))
+
+
+@bp.post("/stebimi/<int:wid>/nutildyti")
+def watch_mute(wid):
+    """Nutildyti for 1–10 weeks; weeks 0 = Atšaukti."""
+    try:
+        weeks = max(0, min(10, int(request.form.get("weeks") or 0)))
+    except ValueError:
+        weeks = 0
+    until = (date.today() + timedelta(weeks=weeks)).isoformat() if weeks else None
+    with db.session(settings()) as conn:
+        with conn:
+            conn.execute("UPDATE watch SET muted_until=? WHERE id=?", (until, wid))
+    mqtt_refresh()
+    flash(f"Nutildyta iki {until}." if until else "Nutildymas atšauktas.", "ok")
+    return redirect(url_for("offers.watch"))
 
 
 @bp.post("/stebimi/<int:wid>/tikslus")

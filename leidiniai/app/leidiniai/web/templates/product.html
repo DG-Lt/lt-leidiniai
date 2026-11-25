@@ -7,6 +7,7 @@
   <div>
     <h1>{{ p.name or '(pavadinimas neatpažintas)' }}</h1>
     {% if desc %}<p><b>Aprašymas:</b> {{ desc }}</p>{% endif %}
+    {% set sb = stock_badge(hist[0]) if hist else none %}{% if sb %}<p><span class="badge stock">{{ '❄️' if sb == 'frozen' else '📦' }} Atsargoms</span> <span class="muted small">{{ 'šaldytas, ' if sb == 'frozen' }}ilgai laikosi ir labai gera kaina</span></p>{% endif %}
     {% set h0 = hist[0] if hist else none %}
     {% if h0 %}<p>{% set orig = originals.get(h0.id) %}{% if orig %}<a href="{{ orig }}" target="_blank" rel="noopener">Originalus leidinys{% if h0.page %}, p. {{ h0.page }}{% endif %}</a>{% endif %}{% if orig and h0.source_url %} · {% endif %}{% if h0.source_url %}<a href="{{ h0.source_url }}" target="_blank" rel="noopener">Leidinys tinklo svetainėje</a>{% endif %}</p>{% endif %}
     <p>{% set lg = logo_url(p.chain) %}{% if lg %}<img class="logo" src="{{ lg }}" alt="{{ CHAIN_NAMES[p.chain] }}" title="{{ CHAIN_NAMES[p.chain] }}">{% else %}<span class="chain c-{{ p.chain }}">{{ CHAIN_NAMES[p.chain] }}</span>{% endif %}

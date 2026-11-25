@@ -43,7 +43,7 @@ def issue_parser(row) -> str:
 def picture_issues(conn, issue_id: int | None = None) -> list:
     """Image-only leaflets waiting for the picture reader (or whose reading failed, up to 3 tries), oldest first."""
     rows = conn.execute("SELECT * FROM issues WHERE (status IN ('waiting_parser','parse_failed')"
-                        "   OR (status='parsed' AND json_extract(meta, '$.reread')))"
+                        "   OR (status='parsed' AND (json_extract(meta, '$.reread') OR json_extract(meta, '$.failed_pages') IS NOT NULL)))"
                         " AND parse_attempts < ? AND (valid_to IS NULL OR valid_to >= ?) ORDER BY id",
                         (MAX_PARSE_ATTEMPTS, date.today().isoformat())).fetchall()
     rows = [r for r in rows if issue_parser(r) == "vision"]
@@ -97,7 +97,13 @@ def parse_stored(conn, settings, issue_id: int, parser: str | None, summary: dic
                 log.info("%s %s: image-only leaflet, the picture reader is not ready", chain, issue["key"])
                 return False
             try:
-                offers, images = vision.parse_issue(settings, issue, files, log, conn=conn, progress=progress)
+                failed_pages: list[int] = []
+                offers, images = vision.parse_issue(settings, issue, files, log, conn=conn, progress=progress,
+                                                    failed_pages=failed_pages)
+                meta.pop("failed_pages", None)
+                if failed_pages:
+                    meta["failed_pages"] = failed_pages
+                    summary["warnings"].append(f"{issue['key']}: page(s) {', '.join(map(str, failed_pages))} not read")
             except vision.NoPictures as e:
                 with conn:
                     conn.execute("UPDATE issues SET status='waiting_parser', parse_attempts=parse_attempts-1"
@@ -113,6 +119,7 @@ def parse_stored(conn, settings, issue_id: int, parser: str | None, summary: dic
             images = render_issue_crops(settings, issue, files, offers, log)
         counts = store.save_offers(conn, issue, offers, images)
         meta.pop("reread", None)
+        meta.pop("reread_error", None)
         with conn:
             conn.execute("UPDATE issues SET status='parsed', offers=?, parsed_at=?, error=NULL, meta=? WHERE id=?",
                          (len(offers), db.now_iso(), json.dumps(meta, ensure_ascii=False), issue_id))
@@ -134,8 +141,11 @@ def parse_stored(conn, settings, issue_id: int, parser: str | None, summary: dic
     except Exception as e:
         # a failed re-reading keeps the earlier offers on show
         st = "parsed" if meta.get("reread") and issue["status"] == "parsed" else "parse_failed"
+        if st == "parsed":
+            meta["reread_error"] = str(e)[:300]  # shown on the Leidiniai row and in the problem sensor
         with conn:
-            conn.execute("UPDATE issues SET status=?, error=? WHERE id=?", (st, f"parse: {e}"[:500], issue_id))
+            conn.execute("UPDATE issues SET status=?, error=?, meta=? WHERE id=?",
+                         (st, f"parse: {e}"[:500], json.dumps(meta, ensure_ascii=False), issue_id))
         summary["errors"].append(f"{issue['key']}: parse failed: {e}")
         log.error("%s %s: parse failed: %s", chain, issue["key"], e)
         log.debug(traceback.format_exc())

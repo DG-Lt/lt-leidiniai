@@ -14,6 +14,7 @@
   <label class="check"><input type="checkbox" name="disc" value="1" {{ 'checked' if f.disc }}> tik su nuolaida</label>
   <label class="check"><input type="checkbox" name="nocard" value="1" {{ 'checked' if f.nocard }}> be kortelės</label>
   <label class="check" title="Ieškoti tik pilnų žodžių (žodžių tvarka nesvarbi): „alus“ neras „natūralus“"><input type="checkbox" name="exact" value="1" {{ 'checked' if f.exact }}> Tikslus žodis</label>
+  <label class="check" title="Ilgai laikosi (arba šaldyti) ir labai gera kaina – taisyklės Būsenos puslapyje"><input type="checkbox" name="stock" value="1" {{ 'checked' if f.stock }}> Atsargoms</label>
   {% if ending_days %}<label class="check" title="Tik pasiūlymai, kurie baigiasi per {{ ending_days }} d. (įskaitant šiandieną)"><input type="checkbox" name="ending" value="1" {{ 'checked' if f.ending }}> Besibaigiantys</label>{% endif %}
   <label class="check" title="Stebimų sąrašo pasiūlymai – sąrašo pradžioje (kiti filtrai galioja)"><input type="checkbox" name="top" value="1" {{ 'checked' if f.top }}> Stebimi viršuje</label>
   <button>Rodyti</button>

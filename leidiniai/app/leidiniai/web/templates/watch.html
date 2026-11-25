@@ -19,32 +19,43 @@
 {% if view == 'tinklas' %}
   {% if terms and not chains %}<p class="muted">Šiuo metu stebimų akcijose nėra.</p>{% endif %}
   {% for g in chains %}
-  <section class="watchterm">
-    <h2>{{ CHAIN_NAMES[g.chain] }} <span class="muted small">– {{ g.offers|length }} pasiūl.</span></h2>
-    <p class="muted small">{% for t, n in g.terms.items() %}{{ t }} ({{ n }}){{ ', ' if not loop.last }}{% endfor %}</p>
-    <div class="grid">{% for o in g.offers %}{{ offer_card(o, true) }}{% endfor %}</div>
-  </section>
+  <details class="acc" data-keep="tinklas-{{ g.chain }}" open>
+    <summary>{{ CHAIN_NAMES[g.chain] }} <span class="muted small">– {{ g.offers|length }} pasiūl.</span>
+      <span class="muted small">{% for t, n in g.terms.items() %}{{ t }} ({{ n }}){{ ', ' if not loop.last }}{% endfor %}</span></summary>
+    <div class="body"><div class="grid">{% for o in g.offers %}{{ offer_card(o, true) }}{% endfor %}</div></div>
+  </details>
   {% endfor %}
   {% if terms %}
   <h2>Stebimi žodžiai</h2>
-  <ul class="small">{% for t in terms %}<li>{{ t.term }}{% if t.chain %} ({{ CHAIN_NAMES[t.chain] }}){% endif %}{% if t.exact %} – tikslus žodis{% endif %} – {{ hits[t.id]|length }} pasiūl.</li>{% endfor %}</ul>
+  <ul class="small">{% for t in terms %}<li>{{ t.term }}{% if t.chain %} ({{ CHAIN_NAMES[t.chain] }}){% endif %}{% if t.exact %} – tikslus žodis{% endif %} – {{ hits[t.id]|length }} pasiūl.{% if muted(t) %} – nutildyta iki {{ t.muted_until }} (neskaičiuojama){% endif %}</li>{% endfor %}</ul>
   {% endif %}
 {% else %}
 {% for t in terms %}
-<section class="watchterm">
-  <h2>{{ t.term }}{% if t.chain %} <span class="muted">({{ CHAIN_NAMES[t.chain] }})</span>{% endif %}
-    <span class="muted small">– {{ hits[t.id]|length }} pasiūl.</span>
-    <form method="post" action="{{ url_for('offers.watch_exact', wid=t.id) }}" class="inline">
-      <label class="check small" title="Ieškoti tik pilnų žodžių"><input type="checkbox" name="exact" value="1" {{ 'checked' if t.exact }} onchange="this.form.submit()"> Tikslus žodis</label>
-      <noscript><button class="secondary small">Išsaugoti</button></noscript>
-    </form>
-    <form method="post" action="{{ url_for('offers.watch_delete', wid=t.id) }}" class="inline"><button class="secondary small">Šalinti</button></form>
-  </h2>
-  {% if hits[t.id] %}
-  <div class="grid">{% for o in hits[t.id][:24] %}{{ offer_card(o, true) }}{% endfor %}</div>
-  {% if hits[t.id]|length > 24 %}<p><a href="{{ url_for('offers.offers', q=t.term_key, chain=t.chain or '', when='all', sort='price', exact='1' if t.exact else '') }}">Visi {{ hits[t.id]|length }} ›</a></p>{% endif %}
-  {% else %}<p class="muted">Šiuo metu akcijose nėra.</p>{% endif %}
-</section>
+{% set m = muted(t) %}
+<details class="acc{{ ' muted-term' if m }}" data-keep="zodis-{{ t.id }}" {{ '' if m else 'open' }}>
+  <summary>{{ t.term }}{% if t.chain %} <span class="muted">({{ CHAIN_NAMES[t.chain] }})</span>{% endif %}
+    <span class="muted small">– {{ hits[t.id]|length }} pasiūl.{% if t.exact %} · tikslus žodis{% endif %}{% if m %} · nutildyta iki {{ t.muted_until }}{% endif %}</span>
+  </summary>
+  <div class="body">
+    <div class="filters small">
+      <form method="post" action="{{ url_for('offers.watch_exact', wid=t.id) }}" class="inline">
+        <label class="check small" title="Ieškoti tik pilnų žodžių"><input type="checkbox" name="exact" value="1" {{ 'checked' if t.exact }} onchange="this.form.submit()"> Tikslus žodis</label>
+        <noscript><button class="secondary small">Išsaugoti</button></noscript>
+      </form>
+      <form method="post" action="{{ url_for('offers.watch_mute', wid=t.id) }}" class="inline">
+        {% if m %}<button class="secondary small" name="weeks" value="0">Atšaukti nutildymą</button>
+        {% else %}<select name="weeks" title="Nutildyti: neparyškinti, neskaičiuoti ir nesiųsti pranešimų">
+          {% for w in range(1, 11) %}<option value="{{ w }}" {{ 'selected' if w == 4 }}>{{ w }} sav.</option>{% endfor %}</select>
+          <button class="secondary small">Nutildyti</button>{% endif %}
+      </form>
+      <form method="post" action="{{ url_for('offers.watch_delete', wid=t.id) }}" class="inline"><button class="secondary small">Šalinti</button></form>
+    </div>
+    {% if hits[t.id] %}
+    <div class="grid">{% for o in hits[t.id][:24] %}{{ offer_card(o, not m) }}{% endfor %}</div>
+    {% if hits[t.id]|length > 24 %}<p><a href="{{ url_for('offers.offers', q=t.term_key, chain=t.chain or '', when='all', sort='price', exact='1' if t.exact else '') }}">Visi {{ hits[t.id]|length }} ›</a></p>{% endif %}
+    {% else %}<p class="muted">Šiuo metu akcijose nėra.</p>{% endif %}
+  </div>
+</details>
 {% endfor %}
 {% endif %}
 {% endblock %}

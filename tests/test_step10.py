@@ -74,7 +74,7 @@ def test_watch_page_views(settings):
     r = c.get("/stebimi?view=tinklas")
     html = r.get_data(as_text=True)
     assert "stebimi_view=tinklas" in r.headers.get("Set-Cookie", "")
-    assert html.index("<h2>Rimi") < html.index("<h2>Maxima") and "– 3 pasiūl." in html and "sviestas (2)" in html
+    assert html.index("<summary>Rimi") < html.index("<summary>Maxima") and "– 3 pasiūl." in html and "sviestas (2)" in html
     assert "Pagal tinklą" in c.get("/stebimi").get_data(as_text=True)  # remembered (cookie)
     wid = conn.execute("SELECT id FROM watch WHERE term='sviestas'").fetchone()[0]
     assert conn.execute("SELECT exact FROM watch WHERE id=?", (wid,)).fetchone()[0] == 1
